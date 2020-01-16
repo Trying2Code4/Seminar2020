@@ -33,12 +33,20 @@ offers = pd.read_excel('OfferDetails_neat.xlsx')
 # Convert user ids into row indices
 temp = defaultdict(lambda: len(temp)) 
 observations['ROW_IND'] = [temp[ele] for ele in observations['USERID']]
-game['ROW_IND'] = [temp[ele] for ele in game['USERID']] # 1676 users who do not appear in observations
+game['ROW_IND'] = [temp[ele] for ele in game['USERID']] # 1676 users not in observations
 # Convert offer ids into column indices
 temp = defaultdict(lambda: len(temp)) 
 observations['COL_IND'] = [temp[ele] for ele in observations['OFFERID']]
-game['COL_IND'] = [temp[ele] for ele in game['OFFERID']] # 10 offers that did not occur in observations
+game['COL_IND'] = [temp[ele] for ele in game['OFFERID']] # 10 offers not in observations
 del temp
+
+# Create dataset without duplicates (keeping only the last observation of the duplicates)
+unique_obs = observations.drop_duplicates(['USERID','OFFERID'], keep='last')
+# =============================================================================
+# MAYBE TODO: Remove duplicates while keeping only first observation to see if
+# this makes any difference in result. (Obviously very low priority, to do only
+# after we have the final model)
+# =============================================================================
 
 #%% SOME EXPLORATORY ANALYSIS
 
@@ -66,51 +74,68 @@ observations.groupby(['USERID','OFFERID','CLICK']).ngroups - observations.groupb
 # Users/offers in game dataset that do not appear in observations
 new_users = list(set(game['USERID']) - set(observations['USERID'])) # 1676
 new_offers = list(set(game['OFFERID']) - set(observations['OFFERID'])) # 108
-#%% BASELINE SSE
+#%% BASELINE
 
-#metrics.mean_squared_error(observations['CLICK'], [0]*observations.shape[0]) # 0.02192184495444662
-np.sum(observations['CLICK']**2) # 705292
+# Majority rule (predict zero for everyone)
+metrics.mean_squared_error(observations['CLICK'], [0]*observations.shape[0]) # MSE 0.02192184495444662
+np.sum(observations['CLICK']**2) # SSE 705292
 
-#%% CREATE SPARSE MATRIX
+# Use overall click rate for as prediction
 
-# Declare sparse matrix, then split data
-#unique_obs = observations.drop_duplicates(['USERID','OFFERID'], keep='last')
-#sparse = csc_matrix((unique_obs['CLICK'], (unique_obs['ROW_IND'], unique_obs['COL_IND'])))
-#trainset, testset = train_test_split(sparse, test_size = 0.2, random_state=seed)
+# Use individual click rate as prediction 
 
-# Split data, then declare sparse matrix
-unique_obs = observations.drop_duplicates(['USERID','OFFERID'], keep='last')
+#%% NON-NEGATIVE MATRIX FACTORISATION using Scikit Learn (VERSION 1)
+
+# Declare sparse matrix, then split data (so both training and test set are sparse matrices)
+sparse = csc_matrix((unique_obs['CLICK'], (unique_obs['ROW_IND'], unique_obs['COL_IND'])))
+trainset, testset = train_test_split(sparse, test_size = 0.2, random_state=seed)
+
+# NMF on training set
+nmf_v1 = NMF(n_components=10, init='nndsvd', random_state=seed)
+result_v1 = nmf_v1.inverse_transform(nmf_v1.fit_transform(trainset)) # Filled-in matrix using MF
+predict_v1 = nmf_v1.transform(testset)
+# =============================================================================
+# TODO: Find a way to compare predictions to compare predictions to test set;
+# calculate error measures
+# =============================================================================
+
+#%% NON-NEGATIVE MATRIX FACTORISATION using Scikit Learn (VERSION 2)
+
+# Split data, then declare training set as sparse matrix
 trainset, testset = train_test_split(unique_obs, test_size = 0.2, random_state=seed)
 sparse = csc_matrix((trainset['CLICK'], (trainset['ROW_IND'], trainset['COL_IND'])))
 
-#%% Non-negative Matrix Factorisation using Scikit Learn
+# NMF on training set
+nmf_v2 = NMF(n_components=10, init='nndsvd', random_state=seed)
+result_v2 = nmf_v2.inverse_transform(nmf_v2.fit_transform(sparse)) # Filled-in matrix using MF
 
-# NMF on train set (not working yet)
-#nmf_train = NMF(n_components=10, init='nndsvd', random_state=seed)
-#result_train = nmf_train.inverse_transform(nmf_train.fit_transform(trainset)) # Filled in matrix using MF
-#result_test = nmf_train.transform(testset)
-
-# NMF on train set (not working yet)
-nmf_train = NMF(n_components=10, init='nndsvd', random_state=seed)
-result_train = nmf_train.inverse_transform(nmf_train.fit_transform(sparse)) # Filled in matrix using MF
-
-nusers, noffers = result_train.shape
+# Prediction
+nusers, noffers = result_v2.shape
 nrow = testset.shape[0]
-predictions = np.empty([nrow,1])
+predict_v2 = np.empty([nrow,1])
 
+# I'm sure there's a more efficient way of doing this, open to suggestions...
 for i in range(nrow):
-    predictions[i] = result_train[testset.iloc[i,4], testset.iloc[i,5]]
-testset['PREDICTION'] = predictions
+    predict_v2[i] = result_v2[testset.iloc[i,4], testset.iloc[i,5]]
+testset['PREDICTION'] = predict_v2
 
-#%% FITTING ON ENTIRE DATASET
+# Error
+mse_v2 = metrics.mean_squared_error(testset['CLICK'], testset['PREDICTION']) # MSE 0.019893710454338503
+sse_v2 = mse_v2 * nrow # SSE 127652.84719561387
+
+# =============================================================================
+# TODO: 5-fold cv + selection of optimal n_components
+# =============================================================================
+
+#%% NON-NEGATIVE MATRIX FACTORISATION -- FITTING ON ENTIRE DATASET
 
 # Fitting on entire set of observations
 nmf = NMF(n_components=10, init='nndsvd', random_state=seed)
-result = nmf.inverse_transform(nmf.fit_transform(sparse)) # Filled in matrix using MF
-#users = nmf.fit_transform(sparse) # Matrix of shape (n_users x n_components) 
-#items = nmf.components_ # Matrix of shape (n_components x n_items)
+result = nmf.inverse_transform(nmf.fit_transform(sparse)) # Filled-in matrix using MF
+#users = nmf.fit_transform(sparse) # [n_users x n_components]
+#items = nmf.components_ # [n_components x n_items]
 
-# Predictions for game dataset
+# Predictions for game dataset (removed users and offers that were not observed for now)
 nusers, noffers = result.shape # 297572, 2130
 game2 = game[(game['ROW_IND']<nusers) & (game['COL_IND']<noffers)]
 nrow = game2.shape[0] # 8041274
