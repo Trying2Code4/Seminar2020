@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import numpy as np
 from scipy.sparse import csc_matrix
-#from sklearn import metrics
+from sklearn import metrics
 from collections import defaultdict 
 #import matplotlib.pyplot as plt
 from sklearn.decomposition import NMF
@@ -17,7 +17,7 @@ from sklearn.model_selection import train_test_split
 
 seed = 1
 
-os.chdir("C:\\Users\\sanne\\Documents\\Master QM\\Block 3\\Seminar Case Studies")
+os.chdir("C:\\Users\\sanne\\Documents\\Master QM\\Block 3\\Seminar Case Studies\\Data")
 
 observations = pd.read_csv('Observations_Report.csv', sep=';')
 game = pd.read_csv('Observations_Game.csv', sep=';')
@@ -71,23 +71,38 @@ new_offers = list(set(game['OFFERID']) - set(observations['OFFERID'])) # 108
 #metrics.mean_squared_error(observations['CLICK'], [0]*observations.shape[0]) # 0.02192184495444662
 np.sum(observations['CLICK']**2) # 705292
 
-#%% SPLITTING DATA INTO TRAIN AND TEST
-
-#trainset, testset = train_test_split(observations, test_size = 0.2, random_state=seed)
-
 #%% CREATE SPARSE MATRIX
 
-# Declare sparse matrix
+# Declare sparse matrix, then split data
+#unique_obs = observations.drop_duplicates(['USERID','OFFERID'], keep='last')
+#sparse = csc_matrix((unique_obs['CLICK'], (unique_obs['ROW_IND'], unique_obs['COL_IND'])))
+#trainset, testset = train_test_split(sparse, test_size = 0.2, random_state=seed)
+
+# Split data, then declare sparse matrix
 unique_obs = observations.drop_duplicates(['USERID','OFFERID'], keep='last')
-sparse = csc_matrix((unique_obs['CLICK'], (unique_obs['ROW_IND'], unique_obs['COL_IND'])))
-trainset, testset = train_test_split(sparse, test_size = 0.2, random_state=seed)
+trainset, testset = train_test_split(unique_obs, test_size = 0.2, random_state=seed)
+sparse = csc_matrix((trainset['CLICK'], (trainset['ROW_IND'], trainset['COL_IND'])))
 
 #%% Non-negative Matrix Factorisation using Scikit Learn
 
 # NMF on train set (not working yet)
+#nmf_train = NMF(n_components=10, init='nndsvd', random_state=seed)
+#result_train = nmf_train.inverse_transform(nmf_train.fit_transform(trainset)) # Filled in matrix using MF
+#result_test = nmf_train.transform(testset)
+
+# NMF on train set (not working yet)
 nmf_train = NMF(n_components=10, init='nndsvd', random_state=seed)
-result_train = nmf_train.inverse_transform(nmf_train.fit_transform(trainset)) # Filled in matrix using MF
-result_test = nmf_train.transform(testset)
+result_train = nmf_train.inverse_transform(nmf_train.fit_transform(sparse)) # Filled in matrix using MF
+
+nusers, noffers = result_train.shape
+nrow = testset.shape[0]
+predictions = np.empty([nrow,1])
+
+for i in range(nrow):
+    predictions[i] = result_train[testset.iloc[i,4], testset.iloc[i,5]]
+testset['PREDICTION'] = predictions
+
+#%% FITTING ON ENTIRE DATASET
 
 # Fitting on entire set of observations
 nmf = NMF(n_components=10, init='nndsvd', random_state=seed)
