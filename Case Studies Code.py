@@ -93,10 +93,10 @@ trainset, testset = train_test_split(sparse, test_size = 0.2, random_state=seed)
 # NMF on training set
 nmf_v1 = NMF(n_components=10, init='nndsvd', random_state=seed)
 result_v1 = nmf_v1.inverse_transform(nmf_v1.fit_transform(trainset)) # Filled-in matrix using MF
-predict_v1 = nmf_v1.transform(testset)
+#predict_v1 = nmf_v1.transform(testset)
 # =============================================================================
-# TODO: Find a way to compare predictions to compare predictions to test set;
-# calculate error measures
+# TODO: Find out ow to predict  when testset has sparse matrix format.
+# Compute error measure.
 # =============================================================================
 
 #%% NON-NEGATIVE MATRIX FACTORISATION using Scikit Learn (VERSION 2)
