@@ -6,6 +6,7 @@ from scipy.sparse import csc_matrix
 from collections import defaultdict 
 #import matplotlib.pyplot as plt
 from sklearn.decomposition import NMF
+from sklearn.model_selection import train_test_split
 
 #from surprise import SVDpp
 #from surprise import Dataset
@@ -13,6 +14,8 @@ from sklearn.decomposition import NMF
 #from surprise.model_selection import cross_validate
 
 #%% LOAD DATA
+
+seed = 1
 
 os.chdir("C:\\Users\\sanne\\Documents\\Master QM\\Block 3\\Seminar Case Studies")
 
@@ -27,8 +30,6 @@ offers = pd.read_excel('OfferDetails_neat.xlsx')
 # Create new variable that combines the mail id and offer id
 #observations['MAILOFFER'] = observations['MAILID'].astype(str) + observations['OFFERID'].astype(str)
 
-#%% CREATE SPARSE MATRIX
-
 # Convert user ids into row indices
 temp = defaultdict(lambda: len(temp)) 
 observations['ROW_IND'] = [temp[ele] for ele in observations['USERID']]
@@ -38,10 +39,6 @@ temp = defaultdict(lambda: len(temp))
 observations['COL_IND'] = [temp[ele] for ele in observations['OFFERID']]
 game['COL_IND'] = [temp[ele] for ele in game['OFFERID']] # 10 offers that did not occur in observations
 del temp
-
-# Declare sparse matrix
-unique_obs = observations.drop_duplicates(['USERID','OFFERID'], keep='last')
-sparse = csc_matrix((unique_obs['CLICK'], (unique_obs['ROW_IND'], unique_obs['COL_IND'])))
 
 #%% SOME EXPLORATORY ANALYSIS
 
@@ -74,13 +71,29 @@ new_offers = list(set(game['OFFERID']) - set(observations['OFFERID'])) # 108
 #metrics.mean_squared_error(observations['CLICK'], [0]*observations.shape[0]) # 0.02192184495444662
 np.sum(observations['CLICK']**2) # 705292
 
+#%% SPLITTING DATA INTO TRAIN AND TEST
+
+#trainset, testset = train_test_split(observations, test_size = 0.2, random_state=seed)
+
+#%% CREATE SPARSE MATRIX
+
+# Declare sparse matrix
+unique_obs = observations.drop_duplicates(['USERID','OFFERID'], keep='last')
+sparse = csc_matrix((unique_obs['CLICK'], (unique_obs['ROW_IND'], unique_obs['COL_IND'])))
+trainset, testset = train_test_split(sparse, test_size = 0.2, random_state=seed)
+
 #%% Non-negative Matrix Factorisation using Scikit Learn
 
-nmf = NMF(n_components=10, init='nndsvd', random_state=1)
+# NMF on train set (not working yet)
+nmf_train = NMF(n_components=10, init='nndsvd', random_state=seed)
+result_train = nmf_train.inverse_transform(nmf_train.fit_transform(trainset)) # Filled in matrix using MF
+result_test = nmf_train.transform(testset)
+
+# Fitting on entire set of observations
+nmf = NMF(n_components=10, init='nndsvd', random_state=seed)
 result = nmf.inverse_transform(nmf.fit_transform(sparse)) # Filled in matrix using MF
 #users = nmf.fit_transform(sparse) # Matrix of shape (n_users x n_components) 
 #items = nmf.components_ # Matrix of shape (n_components x n_items)
-
 
 # Predictions for game dataset
 nusers, noffers = result.shape # 297572, 2130
@@ -95,7 +108,7 @@ for i in range(nrow):
         predictions[i] = result[row_ind, col_ind]
 game2['PREDICTION'] = predictions
 
-#%% SVD++
+#%% SVD++ (PREDICTIONS ARE NOT WORKING PROPERLY)
 
 # Make a smaller subset to improve running times
 dfsmall = observations.sort_values(by=['USERID'], axis = 0, ascending = True)
