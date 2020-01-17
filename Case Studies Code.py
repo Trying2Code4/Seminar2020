@@ -44,8 +44,7 @@ del temp
 unique_obs = observations.drop_duplicates(['USERID','OFFERID'], keep='last')
 # =============================================================================
 # MAYBE TODO: Remove duplicates while keeping only first observation to see if
-# this makes any difference in result. (Obviously very low priority, to do only
-# after we have the final model)
+# this makes any difference in results.
 # =============================================================================
 
 #%% SOME EXPLORATORY ANALYSIS
@@ -95,7 +94,7 @@ nmf_v1 = NMF(n_components=10, init='nndsvd', random_state=seed)
 result_v1 = nmf_v1.inverse_transform(nmf_v1.fit_transform(trainset)) # Filled-in matrix using MF
 #predict_v1 = nmf_v1.transform(testset)
 # =============================================================================
-# TODO: Find out ow to predict  when testset has sparse matrix format.
+# TODO: Find out how to predict when testset has sparse matrix format.
 # Compute error measure.
 # =============================================================================
 
