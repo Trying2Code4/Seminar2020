@@ -51,6 +51,8 @@ sparse_all = csc_matrix((unique_obs['CLICK'], (unique_obs['ROW_IND'], unique_obs
 # this makes any difference in results.
 # =============================================================================
 
+num_users, num_offers  = observations[['USERID','OFFERID']].nunique() # 297572, 2130
+
 #%% SOME EXPLORATORY ANALYSIS
 
 # Sparsity of data
@@ -100,7 +102,7 @@ trainset, testset = train_test_split(sparse_all, test_size = 0.2, random_state=s
 # NMF on training set
 nmf_v1 = NMF(n_components=10, init='nndsvd', random_state=seed)
 result_v1 = nmf_v1.inverse_transform(nmf_v1.fit_transform(trainset)) # Filled-in matrix using MF
-#predict_v1 = nmf_v1.transform(testset)
+#predict_v1 = nmf_v1.inverse_transform(nmf_v1.transform(testset))
 # =============================================================================
 # TODO: Find out how to predict when testset has sparse (CSC) matrix format.
 # Compute error measure.
@@ -110,7 +112,7 @@ result_v1 = nmf_v1.inverse_transform(nmf_v1.fit_transform(trainset)) # Filled-in
 
 # Split data, then declare training set as sparse matrix
 trainset, testset = train_test_split(unique_obs, test_size = 0.2, random_state=seed)
-sparse_v2 = csc_matrix((trainset['CLICK'], (trainset['ROW_IND'], trainset['COL_IND'])))
+sparse_v2 = csc_matrix((trainset['CLICK'], (trainset['ROW_IND'], trainset['COL_IND'])), shape=(num_users, num_offers))
 
 # NMF on training set
 nmf_v2 = NMF(n_components=10, init='nndsvd', random_state=seed)
@@ -126,18 +128,13 @@ nmf_v2_sse = nmf_v2_mse * testset.shape[0] # SSE 127652.84719561387l
 #%% NON-NEGATIVE MATRIX FACTORISATION using Scikit Learn (VERSION 2 -- WITH CV & PARAM SELECTION)
 
 # =============================================================================
-# TODO: Solve problem where data splitting causes test set to contain users/offers
-# that are not in the training set.
-# =============================================================================
-
-# =============================================================================
 # TODO: Switch order of for loops, so data is split just 5 times in total,
 # instead of 5 times per param. Think about how to store the performance
 # measures after switch.
 # =============================================================================
 
-params = [2,5,10,20,50]
-#params = [10]
+#params = [2,5,10,20,50]
+params = [10]
 mean_mse_v2, mean_sse_v2 = [], []
 cv = KFold(n_splits=5, shuffle=True, random_state = seed)
 
@@ -148,15 +145,13 @@ for c in params:
     for train_v2cv, test_v2cv in cv.split(unique_obs):
         # Construct training set and convert into sparse matrix
         trainset_v2cv = unique_obs.iloc[train_v2cv]
-        sparse_v2cv = csc_matrix((trainset_v2cv['CLICK'], (trainset_v2cv['ROW_IND'], trainset_v2cv['COL_IND'])))
+        sparse_v2cv = csc_matrix((trainset_v2cv['CLICK'], (trainset_v2cv['ROW_IND'], trainset_v2cv['COL_IND'])), shape=(num_users, num_offers))
         
         # Apply NMF
         result_v2cv = nmf_v2cv.inverse_transform(nmf_v2cv.fit_transform(sparse_v2cv)) # Filled-in matrix using MF
 
         # Construct and predict test set
-        # (Removed users and offers not in training set as a temporary measure to avoid cold start problem)
         testset_v2cv = unique_obs.iloc[test_v2cv]
-        testset_v2cv = testset_v2cv[(testset_v2cv['ROW_IND']<result_v2cv.shape[0]) & (testset_v2cv['COL_IND']<result_v2cv.shape[1])]
         testset_v2cv.loc[:,'PREDICTION'] = result_v2cv[testset_v2cv.loc[:,'ROW_IND'], testset_v2cv.loc[:,'COL_IND']]
         
         # Performance measures
