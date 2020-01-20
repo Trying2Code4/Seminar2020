@@ -5,11 +5,8 @@ Created on Sun Jan 19 11:44:54 2020
 
 @author: matevaradi
 """
-#import os
-#os.chdir("/Users/matevaradi/Documents/ESE/Seminar/Seminar2020")
-
-
-
+import os
+os.chdir("/Users/matevaradi/Documents/ESE/Seminar/Seminar2020")
 
 import time
 import numpy as np
@@ -17,12 +14,27 @@ import pandas as pd
 from __future__ import division
 
 
-def load_matrix(filename, num_users, num_items,weights=True):
-# Loading a (subset) of the data matrix
+#Get a subset of the data
+sample=data[data["user"]<100]
+from collections import defaultdict
+# Convert user ids into row indices
+temp = defaultdict(lambda: len(temp))
+sample.loc[:,"item"] = [temp[ele] for ele in sample['item']]
+del temp
+
+
+
+
+def load_matrix(filename,weights=True):
+    # Loading a (subset) of the data matrix
     t0 = time.time()
-    data=pd.read_csv(filename,sep=';',names=["user","item","count"],header=None)
+    data=pd.read_csv(filename,sep=';',names=["user","item","count"])
+    data=data.drop(data.index[0])
     #data=data[data["count"]!=0]
-    data=data["user",]
+    #data=data[data["user"]<100]
+    #data=sample
+    num_users=data["user"].nunique()
+    num_items=data["item"].nunique()
     
     counts = np.zeros((num_users, num_items))
     received = np.zeros((num_users, num_items))
@@ -30,8 +42,8 @@ def load_matrix(filename, num_users, num_items,weights=True):
     num_zeros = num_users * num_items
     
     for d in data.values:
-        user = int(d[0])-1
-        item = int(d[1])-1
+        user = int(d[0])
+        item = int(d[1])
         count = float(d[2])
         counts[user][item] = count
         received[user][item] = 1      
@@ -46,8 +58,6 @@ def load_matrix(filename, num_users, num_items,weights=True):
     print 'Finished loading matrix in %f seconds' % (t1 - t0)
     return counts, received
 
-
-counts,received=load_matrix("toydata.csv",10,4,True)
 
 
 class LogisticMF():
@@ -161,21 +171,25 @@ class LogisticMF():
     
         
         
-    
-        
+
+counts,received=load_matrix("Click_nodup.csv",True)          
 
 logMF=LogisticMF(counts,2)
 logMF.train_model()
 logMF.predict()
 
-true,received=load_matrix("toydata.csv",10,4,False)
 
-def get_SSE(self,true,received):
+def get_RMSE(predicted,true,received):
     P=logMF.predict()
     e=true-P
     e*=received
     e*=e
-    SSE=np.sum(e)
-    return SSE
+    RMSE=np.mean(e)
+    RMSE=np.power(RMSE,0.5)
+    return RMSE
+
+true,received=load_matrix("Click_nodup.csv",False)
+P=logMF.predict()
+get_RMSE(P,true,received)
 
 logMF.item_vectors
