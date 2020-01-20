@@ -16,4 +16,20 @@ seed = 1
 ## Make a smaller subset to improve running times
 nObs = 1000000
 observationsSmall = observations.sort_values(by=['USERID'], axis = 0, ascending = True)[1:nObs]
+
+## Recoding column and row numbers
+from collections import defaultdict
+# Convert user ids into row indices
+temp = defaultdict(lambda: len(temp))
+observationsSmall['user'] = [temp[ele] for ele in observationsSmall['USERID']]
+# Convert offer ids into column indices
+temp = defaultdict(lambda: len(temp))
+observationsSmall['item'] = [temp[ele] for ele in observationsSmall['OFFERID']]
+del temp
+
+#Keeping useful columns
+observationsSmall = observationsSmall[['user','item','CLICK']]
+observationsSmall.columns = ['user','item','counts']
+
+## Train test split
 trainset, testset = train_test_split(observationsSmall, test_size = 0.2, random_state=seed)
