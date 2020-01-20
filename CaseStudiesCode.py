@@ -83,16 +83,16 @@ new_offers = list(set(game['OFFERID']) - set(observations['OFFERID'])) # 108
 #%% BASELINE
 
 # =============================================================================
-# TODO: For better comparison later, compure (baseline) performance measures out-of-sample
+# TODO: For better comparison later, compute (baseline) performance measures out-of-sample
 # =============================================================================
 
 # Majority rule (predict zero for everyone)
 metrics.mean_squared_error(observations['CLICK'], [0]*observations.shape[0]) # MSE 0.02192184495444662
 np.sum(observations['CLICK']**2) # SSE 705292
 
-# Use overall click rate for as prediction
+# Use overall click rate as prediction
 
-# Use individual click rate as prediction 
+# Use individual click rate as prediction
 
 #%% NON-NEGATIVE MATRIX FACTORISATION using Scikit Learn (VERSION 1)
 
