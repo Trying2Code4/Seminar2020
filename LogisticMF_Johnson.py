@@ -5,6 +5,8 @@ Created on Sun Jan 19 11:44:54 2020
 
 @author: matevaradi
 """
+
+## PLELIMINARIES
 import os
 os.chdir("/Users/matevaradi/Documents/ESE/Seminar/Seminar2020")
 
@@ -14,6 +16,9 @@ import pandas as pd
 from __future__ import division
 
 
+#%%
+## LOAD DATA
+
 #Get a subset of the data
 sample=data[data["user"]<100]
 from collections import defaultdict
@@ -21,8 +26,6 @@ from collections import defaultdict
 temp = defaultdict(lambda: len(temp))
 sample.loc[:,"item"] = [temp[ele] for ele in sample['item']]
 del temp
-
-
 
 
 def load_matrix(filename,weights=True):
@@ -58,7 +61,8 @@ def load_matrix(filename,weights=True):
     print 'Finished loading matrix in %f seconds' % (t1 - t0)
     return counts, received
 
-
+#%%
+## LOGISTIC MATRIX FACTORIZATION
 
 class LogisticMF():
 
@@ -167,17 +171,16 @@ class LogisticMF():
         P = np.exp(P)
         P = P/(self.ones+P)
         return P
-    
-    
-        
-        
+
+#%%     
+## RUNNING THE METHOD        
 
 counts,received=load_matrix("Click_nodup.csv",True)          
-
 logMF=LogisticMF(counts,2)
 logMF.train_model()
 logMF.predict()
 
+## COUNTIG RMSE
 
 def get_RMSE(predicted,true,received):
     P=logMF.predict()
@@ -186,7 +189,7 @@ def get_RMSE(predicted,true,received):
     e*=e
     RMSE=np.mean(e)
     RMSE=np.power(RMSE,0.5)
-    return RMSE
+    return RMSE    
 
 true,received=load_matrix("Click_nodup.csv",False)
 P=logMF.predict()
