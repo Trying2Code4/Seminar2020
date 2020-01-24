@@ -21,7 +21,7 @@ import random
 
 data=pd.read_csv("Click_nodup.csv",sep=';',names=["user","item","count"],header=0)
 #Get a subset of the data
-sample=data[data["user"]<1000]
+sample=data[data["user"]<100000]
 def reindex_observations(sample):
     #Returns the data sample with user and item indexes starting from 0
     from collections import defaultdict
@@ -34,18 +34,16 @@ def reindex_observations(sample):
     del temp
     return sample
 
-sample=reindex_observations(observationsSmall)
 
+sample=reindex_observations(trainset)
 #Use small subset from  TrainTestSmall.py (trainSet)
-sample=trainset
 
 
 
 def load_matrix(filename,weights=True):
     # Loading a (subset) of the data matrix
     t0 = time.time()
-    #data=pd.read_csv(filename,sep=';',names=["user","item","count"])
-    #data=data[data["count"]!=0]
+    #data=pd.read_csv(filename,sep=';',names=["user","item","count"],header=0)
     data=sample
     num_users=data["user"].nunique()
     num_items=data["item"].nunique()
@@ -59,7 +57,7 @@ def load_matrix(filename,weights=True):
         user = int(d[0])
         item = int(d[1])
         if d[2]==0:          
-            count = -1
+            count = -0.5
         else:
             count=1
         counts[user][item] = count
@@ -109,27 +107,32 @@ class LogisticMF():
             # Fix items and solve for users
             # take step towards gradient of deriv of log likelihood
             # we take a step in positive direction because we are maximizing LL
-            user_vec_deriv, user_bias_deriv = self.deriv(True)
+            user_vec_deriv, user_bias_deriv = self.stochastic_deriv(True)
+            print('gradient descent done')
             user_vec_deriv_sum += np.square(user_vec_deriv)
             user_bias_deriv_sum += np.square(user_bias_deriv)
             vec_step_size = self.gamma / np.sqrt(user_vec_deriv_sum)
             bias_step_size = self.gamma / np.sqrt(user_bias_deriv_sum)
             self.user_vectors += vec_step_size * user_vec_deriv
             self.user_biases += bias_step_size * user_bias_deriv
+            
+            t1 = time.time()
+            print('iteration %i solved for users %f seconds' % (i + 1, t1 - t0))
 
             # Fix users and solve for items
             # take step towards gradient of deriv of log likelihood
             # we take a step in positive direction because we are maximizing LL
-            item_vec_deriv, item_bias_deriv = self.deriv(False)
+            item_vec_deriv, item_bias_deriv = self.stochastic_deriv(False)
+            print('gradient descent done')
             item_vec_deriv_sum += np.square(item_vec_deriv)
             item_bias_deriv_sum += np.square(item_bias_deriv)
             vec_step_size = self.gamma / np.sqrt(item_vec_deriv_sum)
             bias_step_size = self.gamma / np.sqrt(item_bias_deriv_sum)
             self.item_vectors += vec_step_size * item_vec_deriv
             self.item_biases += bias_step_size * item_bias_deriv
-            t1 = time.time()
+            t2 = time.time()
 
-            print('iteration %i finished in %f seconds' % (i + 1, t1 - t0))
+            print('iteration %i finished in %f seconds' % (i + 1, t2 - t0))
 
     def deriv(self, user):
         if user:
@@ -157,7 +160,42 @@ class LogisticMF():
             # L2 regularization
             vec_deriv -= self.reg_param * self.item_vectors
         return (vec_deriv, bias_deriv)
+    
+    def stochastic_deriv(self, user, batch=0.05):
+        if user:
+            #batch+=0.05
+            sample=np.random.choice(self.num_items,size=int(batch*self.num_items))
+            item_vector_sample=self.item_vectors[sample,:]  #dim si x f
+            vec_deriv = np.dot(self.counts[:,sample], item_vector_sample) #dim nu x f
+            bias_deriv = np.expand_dims(np.sum(self.counts[:,sample], axis=1), 1)
+            A = np.dot(self.user_vectors, item_vector_sample.T) #dim nu x si
+            A += self.user_biases
+            A += self.item_biases[sample,:].T
+            A = np.exp(A)
+            A /= (A + self.ones[:,sample])
+            A = (self.counts[:,sample] + self.ones[:,sample]) * A
+            vec_deriv -= np.dot(A, item_vector_sample) 
+            bias_deriv -= np.expand_dims(np.sum(A, axis=1), 1)
+            # L2 regularization
+            vec_deriv -= self.reg_param * self.user_vectors
 
+        else:
+            sample=np.random.choice(self.num_users,size=int(batch*self.num_items))
+            user_vector_sample=self.user_vectors[sample,:]  #dim su x f
+            vec_deriv = np.dot(self.counts[sample,:].T, user_vector_sample) #dim ni x f
+            bias_deriv = np.expand_dims(np.sum(self.counts[sample,:], axis=0), 1)
+            A = np.dot(user_vector_sample, self.item_vectors.T) #dim su x ni
+            A += self.user_biases[sample,:]
+            A += self.item_biases.T
+            A = np.exp(A)
+            A /= (A + self.ones[sample,:])
+            A = (self.counts[sample,:] + self.ones[sample,:]) * A
+            vec_deriv -= np.dot(A.T, user_vector_sample)
+            bias_deriv -= np.expand_dims(np.sum(A, axis=0), 1)
+            # L2 regularization
+            vec_deriv -= self.reg_param * self.item_vectors
+        return (vec_deriv, bias_deriv)
+    
     def log_likelihood(self):
         loglik = 0
         A = np.dot(self.user_vectors, self.item_vectors.T)
@@ -206,7 +244,7 @@ def get_RMSE(predicted,true,received):
     return RMSE    
 
 true,received=load_matrix("Click_nodup.csv",False)
-true[true==-1]=0
+true[true==-0.5]=0
 P=logMF.predict()
 get_RMSE(P,true,received)
 
