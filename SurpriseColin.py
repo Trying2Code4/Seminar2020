@@ -1,6 +1,13 @@
 import pandas as pd
 import numpy as np
+from surprise import SVD
+from surprise import SVDpp
+from surprise import Dataset
+from surprise import Reader
+from surprise.model_selection import cross_validate
+from sklearn.model_selection import train_test_split
 from sklearn import metrics
+seed = 1
 
 # %% LOAD DATA
 
@@ -9,51 +16,53 @@ from sklearn import metrics
 observations = pd.read_csv('Observations_Report.csv', sep=';')
 game = pd.read_csv('Observations_Game.csv', sep=';')
 
-# %% GENERAL
+# %% OPTIONAL: MAKE A SMALLER SUBSET AND TRAIN + TEST
 
-## Note: Here I use the full observations set to compare the baseline predictions
-## with the "real" values. In your case you probably substitute the observations
-## dataframe with a test set
-
-## Case 1: Majority rule (predict zero for everyone)
-## 1. MSE: 0.0219218449544466
-baseline1 = [0]*observations.shape[0]
-RMSE1 = np.sqrt(metrics.mean_squared_error(observations['CLICK'], baseline1))
-
-## Case 2: Use overall click rate for prediction
-## 1. MSE 0.021441277668239916
-baseline2 = [np.mean(observations['CLICK'])]*observations.shape[0]
-RMSE2 = np.sqrt(metrics.mean_squared_error(observations['CLICK'], baseline2))
-
-## Case 3: Use click rate per person as prediction using
-## https://pandas.pydata.org/pandas-docs/stable/user_guide/groupby.html
-## 1. MSE
-baseline3 = observations.groupby('USERID')['CLICK'].transform('mean')
-RMSE3 = np.sqrt(metrics.mean_squared_error(observations['CLICK'], baseline3))
-
-## Case 4: Use click rate per offer as prediction
-## 1. MSE
-baseline4 = observations.groupby('OFFERID')['CLICK'].transform('mean')
-RMSE4 = np.sqrt(metrics.mean_squared_error(observations['CLICK'], baseline4))
-
-## Print the results
-
-print(RMSE1)
-print(RMSE2)
-print(RMSE3)
-print(RMSE4)
-
-# %% HOW TO APPLY IN A TRAIN TEST SCENARIO
-from sklearn.model_selection import train_test_split
-
-## Some data with a train an test split (see TrainTestSmall.py)
-observations = pd.read_csv('Observations_Report.csv', sep=';')
-game = pd.read_csv('Observations_Game.csv', sep=';')
+## Make a smaller subset to improve running times
+nObs = 100000
 seed = 1
-nObs = 1000000
 observationsSmall = observations.sort_values(by=['USERID'], axis = 0, ascending = True)[1:nObs]
 trainset, testset = train_test_split(observationsSmall, test_size = 0.2, random_state=seed)
 
+
+## If we want to make a smaller game set too
+# game_small = game[game['USERID'] < int(dfsmall[['USERID']].max())]
+# game_small['MAILOFFER'] = game_small['MAILID'].astype(str) + game_small['OFFERID'].astype(str)
+# game_small = game_small[['USERID', 'MAILOFFER']]
+# game_small['RATING'] = float("NaN")
+# game_list = game_small.values.tolist()
+
+
+
+# %% DATA PREPARATION 
+
+## Using https://surprise.readthedocs.io/en/stable/getting_started.html#load-from-folds-example
+reader = Reader(rating_scale=(0, 1))
+# data = Dataset.load_from_df(observations[['USERID', 'OFFERID', 'CLICK']], reader)
+## Build the training set
+dataTrain = Dataset.load_from_df(trainset[['USERID', 'OFFERID', 'CLICK']], reader)
+dataTrain = dataTrain.build_full_trainset()
+## Build the test set
+dataTest = testset[['USERID', 'OFFERID']]
+dataTest['CLICK'] = float("NaN")
+dataTest = dataTest.values.tolist()
+
+# %% RUNNING 
+
+## 1. Select the algorithm
+algo = SVDpp(random_state=1)
+## 2. Fit
+algo.fit(dataTrain)
+## 3. Predict
+predictions = algo.test(dataTest)
+predictions = pd.DataFrame(predictions)
+
+# %% Evaluation
+
+## RMSE
+RMSE = np.sqrt(metrics.mean_squared_error(testset['CLICK'], predictions['est']))
+
+## Basline cases:
 ## Case 1: Majority rule (predict zero for everyone)
 ## 1. MSE: 0.02192184495444662
 baseline1 = [0]*testset.shape[0]
@@ -90,12 +99,14 @@ baseline4 = baseline4.fillna(np.mean(trainset['CLICK']))
 ## 4. Calculate RMSE
 RMSE4 = np.sqrt(metrics.mean_squared_error(testset['CLICK'], baseline4))
 
+print(RMSE)
 print(RMSE1)
 print(RMSE2)
 print(RMSE3)
 print(RMSE4)
 
+# %% Using built-in CV
 
-## Possible additional baseline methods.
-## Case 5: Use the average of (1) avg user click rate and (2) avg offer click rate
-## for each user-offer pair
+## Run 5-fold cross-validation and print results
+# data = Dataset.load_from_df(observationsSmall[['USERID', 'OFFERID', 'CLICK']], reader)
+# cross_validate(SVD(), data, measures=['RMSE', 'MAE'], cv=5, verbose=True)
