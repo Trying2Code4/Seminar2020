@@ -44,15 +44,7 @@ print(RMSE3)
 print(RMSE4)
 
 # %% HOW TO APPLY IN A TRAIN TEST SCENARIO
-from sklearn.model_selection import train_test_split
-
-## Some data with a train an test split (see TrainTestSmall.py)
-observations = pd.read_csv('Observations_Report.csv', sep=';')
-game = pd.read_csv('Observations_Game.csv', sep=';')
-seed = 1
-nObs = 1000000
-observationsSmall = observations.sort_values(by=['USERID'], axis = 0, ascending = True)[1:nObs]
-trainset, testset = train_test_split(observationsSmall, test_size = 0.2, random_state=seed)
+from TrainTestSmall import trainset,testset
 
 ## Case 1: Majority rule (predict zero for everyone)
 ## 1. MSE: 0.02192184495444662
