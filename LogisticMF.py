@@ -84,12 +84,14 @@ class LogisticMF():
         item_vec_deriv_sum = np.zeros((self.num_items, self.num_factors))
         user_bias_deriv_sum = np.zeros((self.num_users, 1))
         item_bias_deriv_sum = np.zeros((self.num_items, 1))
+        
+        
         for i in range(self.iterations):
             t0 = time.time()
             # Fix items and solve for users
             # take step towards gradient of deriv of log likelihood
             # we take a step in positive direction because we are maximizing LL
-            user_vec_deriv, user_bias_deriv = self.deriv(True)
+            user_vec_deriv, user_bias_deriv = self.stochastic_deriv(True)
             #print('gradient descent done')
             user_vec_deriv_sum += np.square(user_vec_deriv)
             user_bias_deriv_sum += np.square(user_bias_deriv)
@@ -97,14 +99,14 @@ class LogisticMF():
             bias_step_size = self.lrate / np.sqrt(user_bias_deriv_sum)
             self.user_vectors += vec_step_size * user_vec_deriv
             self.user_biases += bias_step_size * user_bias_deriv
-            
+
             #t1 = time.time()
             #print('iteration %i solved for users %f seconds' % (i + 1, t1 - t0))
 
             # Fix users and solve for items
             # take step towards gradient of deriv of log likelihood
             # we take a step in positive direction because we are maximizing LL
-            item_vec_deriv, item_bias_deriv = self.deriv(False)
+            item_vec_deriv, item_bias_deriv = self.stochastic_deriv(False)
             #print('gradient descent done')
             item_vec_deriv_sum += np.square(item_vec_deriv)
             item_bias_deriv_sum += np.square(item_bias_deriv)
@@ -143,13 +145,13 @@ class LogisticMF():
             vec_deriv -= self.reg_param * self.item_vectors
         return (vec_deriv, bias_deriv)
     
-    def stochastic_deriv(self, user, batch=0.05):
+    def stochastic_deriv(self, user, batch=0.10):
         if user:
-            #batch+=0.05
             sample=np.random.choice(self.num_items,size=int(batch*self.num_items))
             item_vector_sample=self.item_vectors[sample,:]  #dim si x f
             vec_deriv = np.dot(self.clicks[:,sample], item_vector_sample) #dim nu x f
             bias_deriv = np.expand_dims(np.sum(self.clicks[:,sample], axis=1), 1)
+            
             A = np.dot(self.user_vectors, item_vector_sample.T) #dim nu x si
             A += self.user_biases
             A += self.item_biases[sample,:].T
@@ -158,22 +160,23 @@ class LogisticMF():
             A = self.received[:,sample] * A
             vec_deriv -= np.dot(A, item_vector_sample) 
             bias_deriv -= np.expand_dims(np.sum(A, axis=1), 1)
+
             # L2 regularization
             vec_deriv -= self.reg_param * self.user_vectors
 
         else:
-            self=logMF
-            #batch=0.05
-            sample=np.random.choice(self.num_users,size=int(batch*self.num_items))
+            sample=np.random.choice(self.num_users,size=int(batch*self.num_users))
             user_vector_sample=self.user_vectors[sample,:]  #dim su x f
             vec_deriv = np.dot(self.clicks[sample,:].T, user_vector_sample) #dim ni x f
             bias_deriv = np.expand_dims(np.sum(self.clicks[sample,:], axis=0), 1)
+
             A = np.dot(user_vector_sample, self.item_vectors.T) #dim su x ni
             A += self.user_biases[sample,:]
             A += self.item_biases.T
             A = np.exp(A)
             A /= (A + self.ones[sample,:])
             A = self.received[sample,:] * A
+            
             vec_deriv -= np.dot(A.T, user_vector_sample)
             bias_deriv -= np.expand_dims(np.sum(A, axis=0), 1)
             # L2 regularization
@@ -211,7 +214,7 @@ class LogisticMF():
 ## Running the method 
 
 clicks,received=load_matrix(formatted,False)          
-logMF=LogisticMF(clicks,received,num_factors=2)
+logMF=LogisticMF(clicks,received,num_factors=2,iterations=2)
 logMF.train_model()
 
 # Predictions
