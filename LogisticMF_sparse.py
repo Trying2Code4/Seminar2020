@@ -21,9 +21,18 @@ os.chdir("/Users/matevaradi/Documents/ESE/Seminar/Seminar2020")
 from TrainTestSmall import trainset,testset
 from Tools import encoder, test_predictions
 
+#Filter for users that have at least one click
+#byUser=trainset.groupby(["USERID"])
+#filteredData=byUser.filter(lambda x: (x["CLICK"].sum()>0) )
+
 #Get data in sparse format and keys for mapping
 formatted,key=encoder(trainset) 
 
+## LOAD DATA
+
+clicks=sp.csr_matrix((formatted["click"], (formatted["user"], formatted["item"])))
+#Load ones where there was an observation
+received=sp.csr_matrix((np.ones(len(formatted["user"])),(formatted["user"],formatted["item"])))
 #%%  
 ## INTERMEZZO: how to deal with sparse matrixes
 
@@ -51,12 +60,6 @@ M= sprs.multiply(R2)
 M.toarray()
 M.shape
 
-#%%  
-## LOAD DATA:
-
-clicks=sp.csr_matrix((formatted["click"], (formatted["user"], formatted["item"])))
-#Load ones where there was an observation
-received=sp.csr_matrix((np.ones(len(formatted["user"])),(formatted["user"],formatted["item"])))
 
 #%% LOGISTIC MATRIX FACTORIZATION
 
@@ -80,8 +83,11 @@ class LogisticMF():
                                                    self.num_factors))
         self.item_vectors = np.random.normal(size=(self.num_items,
                                                    self.num_factors))
-        self.user_biases = np.random.normal(size=(self.num_users, 1))
-        self.item_biases = np.random.normal(size=(self.num_items, 1))
+        #self.user_biases = np.random.normal(size=(self.num_users, 1))
+        #self.item_biases = np.random.normal(size=(self.num_items, 1))
+        self.user_biases = np.zeros((self.num_users, 1))
+        self.item_biases = np.zeros((self.num_items, 1))
+
 
         user_vec_deriv_sum = np.zeros((self.num_users, self.num_factors))
         item_vec_deriv_sum = np.zeros((self.num_items, self.num_factors))
@@ -216,12 +222,12 @@ class LogisticMF():
     
 #%% RUNNING THE METHOD
         
-logMF=LogisticMF(clicks,received,num_factors=2,iterations=30)
+logMF=LogisticMF(clicks,received,num_factors=1,iterations=30)
 logMF.train_model()
 
 # Predictions
 P=logMF.predict()
-results=test_predictions(P,key,testset)
+results=test_predictions(P,key,trainset,testset,replacement=0.0313503918798985)
 
 
 # Get Train RMSE
@@ -253,14 +259,14 @@ def testRMSE(results):
 testRMSE(results)
 
 #%% CROSS-VALIDATION
+import itertools
+from Tools import CV_test_RMSE
+from sklearn.model_selection import KFold
 
 ## Preparing parameters combinations
-
-import itertools
-# Parameters to try
-fs=[2,3,4,5]                    # number of latent factors (f)
-lambdas=[0.2,0.4,0.8,1,1.2]     # reg param (lamba)
-deltas=[0.5,1,1,1.5]            # learning rate (delta)
+fs=[1]                    # number of latent factors (f)
+lambdas=[1,1.1,1.2,1.3,1.4]     # reg param (lamba)
+deltas=[0.2,0.3,0.5,0.6,1,1]            # learning rate (delta)
 # Calculate cartesian product of parameter values to try
 param_combs=list(itertools.product(fs,lambdas,deltas))                                               
 # Preparing to store probability matrices
@@ -268,13 +274,11 @@ num_combs=len(param_combs)
 
 
 ## Preparing Cross Validation
-
-from Tools import CV_test_RMSE
-from sklearn.model_selection import KFold
 observations = pd.read_csv('Observations_Report.csv', sep=';')
-nObs = 1000000
+nObs = 100000
 #Taking a subset of the observations
-observationsSmall = observations.sample(frac=1)[1:nObs]
+observationsSmall = observations.sort_values(by=['USERID'], axis = 0, ascending = False)[4000:(4000+nObs)] #-> random users
+#observationsSmall = observations.sample(frac=1)[1:nObs] #shuffle the observations -> completely random obs
 k=5   #number of folds to use
 kf = KFold(n_splits=k)
 kf.split(observationsSmall)
@@ -301,7 +305,7 @@ for train_index, test_index in kf.split(observationsSmall):
        P_matrices.append(P)
    
    # Getting RMSEs on test set
-   RMSEs[:,fold]=CV_test_RMSE(P_matrices, key, test)
+   RMSEs[:,fold]=CV_test_RMSE(P_matrices, key, train,test,replacement=0.0313503918798985)
    fold+=1
    P_matrices=[]
 
