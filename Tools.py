@@ -42,7 +42,7 @@ def encoder(data):
 #Output:
 # results dataframe, same as testset, but with added column:
 # PROBABILITY: predictions for the test dataset
-def test_predictions(p, key, test, replacement = 0.02192184495444662):
+def test_predictions(p, key, train, test, replacement = 0.02192184495444662):
     #iterating variable
     iter=0 
     #Define variables for process status
@@ -61,18 +61,20 @@ def test_predictions(p, key, test, replacement = 0.02192184495444662):
         testuser = int(row[0]) #USERID
         testitem = int(row[2]) #OFFERID
 
-        #Check if the user and the item both occur in the training matri
+        # Check if the user and the item both occur in the training matrix
         if (key[(key["USERID"]==testuser)].empty) | (key[(key["OFFERID"] == testitem)].empty):
             #Prediction will be the baseline in this case
             pass
+        # Predict 0 for users that haven't clicked on anything in the training set
+        elif sum(train.loc[train["USERID"]==testuser,"CLICK"])<1:
+            output.loc[index,'PROBABILITY']=0
         else:
-            #user = int(key[(key["USERID"]==testuser) & (key["OFFERID"] == testitem)]['user'])
-            #item = int(key[(key["USERID"]==testuser) & (key["OFFERID"] == testitem)]['item'])
             #Find new indexes as they appear in the reformatted (training) matrix
             trainuser=key[key["USERID"] == testuser]["user"].values[0]
             trainitem=key[key["OFFERID"] == testitem]["item"].values[0]
             #Retrieve predicted probability from p matrix
             output.loc[index,'PROBABILITY'] = p[trainuser][trainitem]
+            
         iter+=1
         if iter/total > (j*0.1):    
             print('The process is', (j*10), '% ready')
@@ -95,7 +97,7 @@ def test_predictions(p, key, test, replacement = 0.02192184495444662):
 #Output:
 # results dataframe, same as testset, but with added columns:
 # PROBABILITY_1,PROBABILITY_2,PROBABILITY_3: predictions for the test dataset for prediction matrix 1,2,3..
-def CV_test_RMSE(list_P, key, test, replacement = 0.02192184495444662):
+def CV_test_RMSE(list_P, key, train,test, replacement = 0.02192184495444662):
     import numpy as np
     import pandas as pd
     #iterating variable
@@ -103,7 +105,7 @@ def CV_test_RMSE(list_P, key, test, replacement = 0.02192184495444662):
     
     #Defining dataframe to store results
     df = test.copy()
-    
+        
     #Defining output
     num_methods=len(list_P)
     output=np.zeros(num_methods)
@@ -124,6 +126,8 @@ def CV_test_RMSE(list_P, key, test, replacement = 0.02192184495444662):
         if (key[(key["USERID"]==testuser)].empty) | (key[(key["OFFERID"] == testitem)].empty):
             #Prediction will be the baseline in this case
             pass
+        elif sum(train.loc[train["USERID"]==testuser,"CLICK"])<1:
+            df.loc[index,'PROBABILITY_'+str(method_iter)]=0
         else:
             #user = int(key[(key["USERID"]==testuser) & (key["OFFERID"] == testitem)]['user'])
             #item = int(key[(key["USERID"]==testuser) & (key["OFFERID"] == testitem)]['item'])
@@ -153,7 +157,16 @@ def CV_test_RMSE(list_P, key, test, replacement = 0.02192184495444662):
         
         
 
-        
+#%% TRAIN AND TEST SET GENERATION
+def train_test(nObs=100000,testSize=0.2,seed=1):
+    import pandas as pd
+    from sklearn.model_selection import train_test_split
     
-
-#
+    # LOAD DATA
+    observations = pd.read_csv('Observations_Report.csv', sep=';')
+    # MAKE A SMALLER SUBSET AND TRAIN + TEST
+    observationsSmall = observations.sort_values(by=['USERID'], axis = 0, ascending = True)[1:nObs]
+    ## Train test split
+    trainset, testset = train_test_split(observationsSmall, test_size = testSize, random_state=seed)
+    return trainset,testset    
+    

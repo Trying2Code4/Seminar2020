@@ -16,7 +16,5 @@ seed = 1
 ## Make a smaller subset to improve running times
 nObs = 100000
 observationsSmall = observations.sort_values(by=['USERID'], axis = 0, ascending = True)[1:nObs]
-
-
 ## Train test split
 trainset, testset = train_test_split(observationsSmall, test_size = 0.2, random_state=seed)
