@@ -46,6 +46,7 @@ del temp
 unique_obs = observations.drop_duplicates(['USERID','OFFERID'], keep='last')
 unique_obs = unique_obs[['ROW_IND','COL_IND','CLICK']]
 sparse_all = csc_matrix((unique_obs['CLICK'], (unique_obs['ROW_IND'], unique_obs['COL_IND'])))
+
 # =============================================================================
 # MAYBE TODO: Remove duplicates while keeping only first observation to see if
 # this makes any difference in results.
