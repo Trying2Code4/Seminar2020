@@ -254,7 +254,7 @@ observations = pd.read_csv('Observations_Report.csv', sep=';')
 
 ## Preparing parameters combinations
 methods=["Logit","RF"]              
-minobservation=[50,100,150,200,500,1000]    
+minobservation=[50,100,150,200,500]    
 minclick=[1,2,3,5,10]
 # Calculate cartesian product of parameter values to try
 param_combs=list(itertools.product(methods,minobservation,minclick))                                               
@@ -263,10 +263,10 @@ num_combs=len(param_combs)
 
 
 ## Preparing Cross Validation
-nObs = 10000000
+nObs = 500000
 #Taking a subset of the observations
 observationsSmall = observations.sort_values(by=['USERID'], axis = 0, ascending = False)[5000:(5000+nObs)] #-> random users
-k=3   #number of folds to use
+k=5   #number of folds to use
 kf = KFold(n_splits=k)
 kf.split(observationsSmall)
 RMSEs=np.zeros((num_combs,k))  #parameter combinations in rows, folds in columns
@@ -291,6 +291,6 @@ for train_index, test_index in kf.split(observationsSmall):
 meanRMSE=np.mean(RMSEs,axis=1)
 
 # Find the parameter combination with the lowest 
-param_combs[np.argmin(meanRMSE)]
+param_combs[np.argmin(meanRMSE)] #('Logit', 200, 1)
     
         
