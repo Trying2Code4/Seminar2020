@@ -13,12 +13,14 @@ import pandas as pd
 import numpy as np
 from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 from sklearn.ensemble import RandomForestClassifier
-import statsmodels.api as sm
 
 offers=pd.read_csv("offers_clean.csv")
 from TrainTestSmall import trainset,testset
 from BaselinePredictions import baselines 
 from Tools import train_test
+import matplotlib.pyplot as plt
+%matplotlib qt
+import seaborn as sns
 
 #RMSE function
 def RMSE(pred,true):
@@ -119,6 +121,38 @@ for id in userids:
 
 # Test RMSE
 RMSE(testset["PROBABILITIES"],testset["CLICK"])
+
+
+#%%
+# Look into coefficients
+
+# Look at model coefficients for a single ID
+id=44405733
+pd.DataFrame(np.vstack((np.array(predictors),userFits[id].coef_[0])).T)
+
+coefs=np.zeros((len(userids),len(predictors)+1))
+iter=0
+for id in userids:
+    coefs[iter,1:]=userFits[id].coef_
+    coefs[iter,0]=userFits[id].intercept_
+    iter+=1
+# Storing it in a dataframe
+coefdf=pd.DataFrame(coefs)
+
+# Get the 10 predictors that are the least often 0
+inds=np.argpartition(coefdf.apply(lambda x: x[abs(x)>0].count(), axis=0),-41)[-41:].values
+# Get rid of price original as that one is fucked
+inds=inds[inds!=3]
+
+# Selecting the label names and non-zero coefficient values to plot
+selectlabels=[(["INTERCEPT"] + predictors)[i] for i in sorted(inds)[::-1]]
+selectcoefs=[coefs[abs(coefs[:,i])>0,i] for i in sorted(inds)[::-1]]
+
+# Creating the plot
+fig = plt.figure()
+ax = fig.add_subplot(111)
+ax.boxplot(selectcoefs, labels=selectlabels,vert=False)
+
 
 #%%%
 #' Putting it together in a function
@@ -254,7 +288,7 @@ observations = pd.read_csv('Observations_Report.csv', sep=';')
 
 ## Preparing parameters combinations
 methods=["Logit","RF"]              
-minobservation=[50,100,150,200,500,1000]    
+minobservation=[50,100,150,200,500]    
 minclick=[1,2,3,5,10]
 # Calculate cartesian product of parameter values to try
 param_combs=list(itertools.product(methods,minobservation,minclick))                                               
@@ -263,10 +297,10 @@ num_combs=len(param_combs)
 
 
 ## Preparing Cross Validation
-nObs = 10000000
+nObs = 500000
 #Taking a subset of the observations
 observationsSmall = observations.sort_values(by=['USERID'], axis = 0, ascending = False)[5000:(5000+nObs)] #-> random users
-k=3   #number of folds to use
+k=5   #number of folds to use
 kf = KFold(n_splits=k)
 kf.split(observationsSmall)
 RMSEs=np.zeros((num_combs,k))  #parameter combinations in rows, folds in columns
@@ -291,6 +325,6 @@ for train_index, test_index in kf.split(observationsSmall):
 meanRMSE=np.mean(RMSEs,axis=1)
 
 # Find the parameter combination with the lowest 
-param_combs[np.argmin(meanRMSE)]
+param_combs[np.argmin(meanRMSE)] #('Logit', 200, 1)
     
         

@@ -32,6 +32,10 @@ def encoder(data):
     return formatted, key
 
 #%%
+import pandas as pd
+import numpy as np
+import time
+import swifter
 
 #TEST_PREDICTIONS
 #Input:
@@ -43,6 +47,7 @@ def encoder(data):
 # results dataframe, same as testset, but with added column:
 # PROBABILITY: predictions for the test dataset
 def test_predictions(p, key, train, test, replacement = 0.02192184495444662):
+    t0 = time.time()
     #iterating variable
     iter=0 
     #Define variables for process status
@@ -80,11 +85,27 @@ def test_predictions(p, key, train, test, replacement = 0.02192184495444662):
             print('The process is', (j*10), '% ready')
             j+=1
         
-    print('The process is 100 % ready')  
+    t1=time.time()
+    print('The process is 100 % ready. Time elapsed: ', round(t1-t0), ' seconds')  
     
     return output
 
 
+def get_test_pred(userid,offerid,train,key,p,baseline=0.02192184495444662):
+    if (key[(key["USERID"]==userid)].empty) | (key[(key["OFFERID"] == offerid)].empty):
+        #Prediction will be the baseline in this case
+        return baseline
+        # Predict 0 for users that haven't clicked on anything in the training set
+    elif sum(train.loc[train["USERID"]==userid,"CLICK"])<1:
+        return 0
+    else:
+        #Find new indexes as they appear in the reformatted (training) matrix
+        trainuser=key[key["USERID"] == userid]["user"].values[0]
+        trainitem=key[key["OFFERID"] == offerid]["item"].values[0]
+        #Retrieve predicted probability from p matrix
+        return p[trainuser][trainitem]
+
+    
 #%%
 
 #CV_TEST_PREDICTIONS
