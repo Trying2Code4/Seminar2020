@@ -22,8 +22,9 @@ import matplotlib.pyplot as plt
 #from TrainTestSmall import trainset,testset
 from Tools import encoder, test_predictions, train_test, get_test_pred
 trainset,testset=train_test(100000)
+# 32173022 to use full
 
-#Filter for users that have at least one click
+# Optional: Filter for users that have at least one click
 byUser=trainset.groupby(["USERID"])
 filteredData=byUser.filter(lambda x: (x["CLICK"].sum()>0) )
 formatted,key=encoder(filteredData) 
@@ -70,7 +71,7 @@ M.shape
 class LogisticMF():
 
     def __init__(self, clicks, received,num_factors, reg_param=0.6, lrate=1.0,
-                 iterations=30):
+                 iterations=30,stochastic=False):
         self.clicks = clicks            #click data in sparse format
         self.received = received
         self.num_users = clicks.shape[0]
@@ -79,14 +80,15 @@ class LogisticMF():
         self.iterations = iterations
         self.reg_param = reg_param       #lambda
         self.lrate = lrate               #learning rate
+        self.stochastic= stochastic      #stochastic gradient descent or full
 
     def train_model(self):
 
         self.ones = np.ones((self.num_users, self.num_items))
-        self.user_vectors = np.random.normal(size=(self.num_users,
-                                                   self.num_factors))
-        self.item_vectors = np.random.normal(size=(self.num_items,
-                                                   self.num_factors))
+        self.user_vectors = np.random.normal(scale=1/self.reg_param,
+                                             size=(self.num_users,self.num_factors))
+        self.item_vectors = np.random.normal(scale=1/self.reg_param,
+                                             size=(self.num_items,self.num_factors))
         #self.user_biases = np.random.normal(size=(self.num_users, 1))
         #self.item_biases = np.random.normal(size=(self.num_items, 1))
         self.user_biases = np.zeros((self.num_users, 1))
@@ -95,10 +97,15 @@ class LogisticMF():
 
         user_vec_deriv_sum = np.zeros((self.num_users, self.num_factors))
         item_vec_deriv_sum = np.zeros((self.num_items, self.num_factors))
-        user_bias_deriv_sum = np.zeros((self.num_users, 1))
-        item_bias_deriv_sum = np.zeros((self.num_items, 1))
         
-        self.convergence = np.zeros((self.iterations,3))
+        if self.stochastic:
+            user_bias_deriv_sum = np.ones((self.num_users, 1)) #
+            item_bias_deriv_sum = np.ones((self.num_items, 1)) #
+        else:
+            user_bias_deriv_sum = np.zeros((self.num_users, 1)) 
+            item_bias_deriv_sum = np.zeros((self.num_items, 1)) 
+        
+        self.convergence = np.zeros((self.iterations,3)) 
         
         
         for i in range(self.iterations):
@@ -106,7 +113,10 @@ class LogisticMF():
             # Fix items and solve for users
             # take step towards gradient of deriv of log likelihood
             # we take a step in positive direction because we are maximizing LL
-            user_vec_deriv, user_bias_deriv = self.deriv(True)
+            if self.stochastic:
+                user_vec_deriv, user_bias_deriv = self.stochastic_deriv(True)
+            else:
+                user_vec_deriv, user_bias_deriv = self.deriv(True)
             user_vec_deriv_sum += np.square(user_vec_deriv)
             user_bias_deriv_sum += np.square(user_bias_deriv)
             vec_step_size = self.lrate / np.sqrt(user_vec_deriv_sum)
@@ -120,7 +130,10 @@ class LogisticMF():
             # Fix users and solve for items
             # take step towards gradient of deriv of log likelihood
             # we take a step in positive direction because we are maximizing LL
-            item_vec_deriv, item_bias_deriv = self.deriv(False)
+            if self.stochastic:
+                item_vec_deriv, item_bias_deriv = self.stochastic_deriv(False)
+            else:
+                item_vec_deriv, item_bias_deriv = self.deriv(False)
             item_vec_deriv_sum += np.square(item_vec_deriv)
             item_bias_deriv_sum += np.square(item_bias_deriv)
             vec_step_size = self.lrate / np.sqrt(item_vec_deriv_sum)
@@ -140,12 +153,12 @@ class LogisticMF():
 
     def deriv(self, user):
         if user:
-            vec_deriv = self.clicks.multiply(self.received).dot(self.item_vectors) #
+            vec_deriv = self.clicks.dot(self.item_vectors) #
             #bias_deriv = np.expand_dims(np.sum(self.clicks, axis=1), 1)
             bias_deriv = np.sum(self.clicks.multiply(self.received), axis=1) #
 
         else:
-            vec_deriv = self.clicks.multiply(self.received).transpose().dot(self.user_vectors)    #
+            vec_deriv = self.clicks.transpose().dot(self.user_vectors)    #
             #bias_deriv = np.expand_dims(np.sum(self.clicks, axis=0), 1)
             bias_deriv = np.sum(self.clicks.multiply(self.received), axis=0).T   #
         A = np.dot(self.user_vectors, self.item_vectors.T)
@@ -173,7 +186,7 @@ class LogisticMF():
             sample=np.random.choice(self.num_items,size=int(batch*self.num_items))
             item_vector_sample=self.item_vectors[sample,:]  #dim si x f
             vec_deriv = self.clicks[:,sample] @ item_vector_sample #dim nu x f
-            bias_deriv =  np.sum(self.clicks[:,sample], axis=1)
+            bias_deriv = np.sum(self.clicks[:,sample], axis=1) 
             
             A = np.dot(self.user_vectors, item_vector_sample.T) #dim nu x si
             A += self.user_biases
@@ -191,7 +204,7 @@ class LogisticMF():
             sample=np.random.choice(self.num_users,size=int(batch*self.num_users))
             user_vector_sample=self.user_vectors[sample,:]  #dim su x f
             vec_deriv = self.clicks[sample,:].transpose() @ user_vector_sample #dim ni x f
-            bias_deriv = np.sum(self.clicks[sample,:], axis=0).T
+            bias_deriv = np.sum(self.clicks[sample,:], axis=0).T   
             
             A = np.dot(user_vector_sample, self.item_vectors.T) #dim su x ni
             A += self.user_biases[sample,:]
@@ -239,8 +252,12 @@ class LogisticMF():
     
 #%% RUNNING THE METHOD
         
-logMF=LogisticMF(clicks,received,num_factors=1,iterations=1500)
+logMF=LogisticMF(clicks,received,num_factors=1,iterations=1500,stochastic=False)
 logMF.train_model()
+
+logMF=LogisticMF(clicks,received,num_factors=1,iterations=60,stochastic=True)
+logMF.train_model()
+
 
 # Predictions
 P=logMF.predict()
@@ -281,12 +298,17 @@ from BaselinePredictions import baselines
 baselines(trainset,testset)
 
 
-# Testing Convergence
-plt.plot(list(range(logMF.iterations)),logMF.convergence[:,0])
-plt.show()
-plt.plot(list(range(logMF.iterations)),logMF.convergence[:,1],color='olive')
-plt.plot(list(range(logMF.iterations)),logMF.convergence[:,2],color='blue')
-plt.show()
+# Plotting Convergence
+fig, (ax1, ax2) = plt.subplots(2)
+ax1.set_title('Log-likelihood')
+ax1.plot(list(range(logMF.iterations)),logMF.convergence[:,0])
+ax1.get_xaxis().set_visible(False)
+ax2.set_title('Gradient norms')
+ax2.plot(list(range(logMF.iterations)),logMF.convergence[:,1],color='red',label="User vectors")
+ax2.plot(list(range(logMF.iterations)),logMF.convergence[:,2],color='green',label="Item vectors")
+ax2.xlabel("Iterations")
+ax2.legend()
+
 
 #%% CROSS-VALIDATION
 import itertools

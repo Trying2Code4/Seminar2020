@@ -13,12 +13,14 @@ import pandas as pd
 import numpy as np
 from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 from sklearn.ensemble import RandomForestClassifier
-import statsmodels.api as sm
 
 offers=pd.read_csv("offers_clean.csv")
 from TrainTestSmall import trainset,testset
 from BaselinePredictions import baselines 
 from Tools import train_test
+import matplotlib.pyplot as plt
+%matplotlib qt
+import seaborn as sns
 
 #RMSE function
 def RMSE(pred,true):
@@ -119,6 +121,38 @@ for id in userids:
 
 # Test RMSE
 RMSE(testset["PROBABILITIES"],testset["CLICK"])
+
+
+#%%
+# Look into coefficients
+
+# Look at model coefficients for a single ID
+id=44405733
+pd.DataFrame(np.vstack((np.array(predictors),userFits[id].coef_[0])).T)
+
+coefs=np.zeros((len(userids),len(predictors)+1))
+iter=0
+for id in userids:
+    coefs[iter,1:]=userFits[id].coef_
+    coefs[iter,0]=userFits[id].intercept_
+    iter+=1
+# Storing it in a dataframe
+coefdf=pd.DataFrame(coefs)
+
+# Get the 10 predictors that are the least often 0
+inds=np.argpartition(coefdf.apply(lambda x: x[abs(x)>0].count(), axis=0),-41)[-41:].values
+# Get rid of price original as that one is fucked
+inds=inds[inds!=3]
+
+# Selecting the label names and non-zero coefficient values to plot
+selectlabels=[(["INTERCEPT"] + predictors)[i] for i in sorted(inds)[::-1]]
+selectcoefs=[coefs[abs(coefs[:,i])>0,i] for i in sorted(inds)[::-1]]
+
+# Creating the plot
+fig = plt.figure()
+ax = fig.add_subplot(111)
+ax.boxplot(selectcoefs, labels=selectlabels,vert=False)
+
 
 #%%%
 #' Putting it together in a function

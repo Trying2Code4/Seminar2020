@@ -19,14 +19,17 @@ os.chdir("/Users/matevaradi/Documents/ESE/Seminar/Seminar2020")
 
 #Get a subset of the data from TrainTestSmall
 from TrainTestSmall import trainset,testset
-from Tools import encoder, test_predictions
+from Tools import encoder, test_predictions, train_test
+trainset,testset=train_test(100000)
 
 #Filter for users that have at least one click
-#byUser=trainset.groupby(["USERID"])
-#filteredData=byUser.filter(lambda x: (x["CLICK"].sum()>0) )
+byUser=trainset.groupby(["USERID"])
+filteredData=byUser.filter(lambda x: (x["CLICK"].sum()>0) )
+formatted,key=encoder(filteredData) 
 
 #Get data in sparse format and keys for mapping
 formatted,key=encoder(trainset) 
+
 
 ## LOAD DATA
 
@@ -155,43 +158,44 @@ class LogisticMF():
             vec_deriv = vec_deriv - self.reg_param * self.item_vectors
         return (vec_deriv, bias_deriv)
     
-    # def stochastic_deriv(self, user, batch=0.10):
-    #     if user:
-    #         sample=np.random.choice(self.num_items,size=int(batch*self.num_items))
-    #         item_vector_sample=self.item_vectors[sample,:]  #dim si x f
-    #         vec_deriv = np.dot(self.clicks[:,sample], item_vector_sample) #dim nu x f
-    #         bias_deriv = np.expand_dims(np.sum(self.clicks[:,sample], axis=1), 1)
+    def stochastic_deriv(self, user, batch=0.10):
+        if user:
+            sample=np.random.choice(self.num_items,size=int(batch*self.num_items))
+            item_vector_sample=self.item_vectors[sample,:]  #dim si x f
+            vec_deriv = self.clicks[:,sample] @ item_vector_sample #dim nu x f
+            bias_deriv =  np.sum(self.clicks[:,sample], axis=1)
             
-    #         A = np.dot(self.user_vectors, item_vector_sample.T) #dim nu x si
-    #         A += self.user_biases
-    #         A += self.item_biases[sample,:].T
-    #         A = np.exp(A)
-    #         A /= (A + self.ones[:,sample])
-    #         A = self.received[:,sample] * A
-    #         vec_deriv -= np.dot(A, item_vector_sample) 
-    #         bias_deriv -= np.expand_dims(np.sum(A, axis=1), 1)
+            A = np.dot(self.user_vectors, item_vector_sample.T) #dim nu x si
+            A += self.user_biases
+            A += self.item_biases[sample,:].T
+            A = np.exp(A)
+            A /= (A + self.ones[:,sample])
+            A = self.received[:,sample].multiply(A)
+            A = A.toarray()
+            vec_deriv = vec_deriv - np.dot(A, item_vector_sample) 
+            bias_deriv = bias_deriv - np.expand_dims(np.sum(A, axis=1), 1)
+            # L2 regularization
+            vec_deriv = vec_deriv-  self.reg_param * self.user_vectors
 
-    #         # L2 regularization
-    #         vec_deriv -= self.reg_param * self.user_vectors
-
-    #     else:
-    #         sample=np.random.choice(self.num_users,size=int(batch*self.num_users))
-    #         user_vector_sample=self.user_vectors[sample,:]  #dim su x f
-    #         vec_deriv = np.dot(self.clicks[sample,:].T, user_vector_sample) #dim ni x f
-    #         bias_deriv = np.expand_dims(np.sum(self.clicks[sample,:], axis=0), 1)
-
-    #         A = np.dot(user_vector_sample, self.item_vectors.T) #dim su x ni
-    #         A += self.user_biases[sample,:]
-    #         A += self.item_biases.T
-    #         A = np.exp(A)
-    #         A /= (A + self.ones[sample,:])
-    #         A = self.received[sample,:] * A
+        else:
+            sample=np.random.choice(self.num_users,size=int(batch*self.num_users))
+            user_vector_sample=self.user_vectors[sample,:]  #dim su x f
+            vec_deriv = self.clicks[sample,:].transpose() @ user_vector_sample #dim ni x f
+            bias_deriv = np.sum(self.clicks[sample,:], axis=0).T
             
-    #         vec_deriv -= np.dot(A.T, user_vector_sample)
-    #         bias_deriv -= np.expand_dims(np.sum(A, axis=0), 1)
-    #         # L2 regularization
-    #         vec_deriv -= self.reg_param * self.item_vectors
-    #     return (vec_deriv, bias_deriv)
+            A = np.dot(user_vector_sample, self.item_vectors.T) #dim su x ni
+            A += self.user_biases[sample,:]
+            A += self.item_biases.T
+            A = np.exp(A)
+            A /= (A + self.ones[sample,:])
+            A = self.received[sample,:].multiply(A)
+            A = A.toarray()
+            vec_deriv = vec_deriv - np.dot(A.T, user_vector_sample)
+            bias_deriv = bias_deriv - np.expand_dims(np.sum(A, axis=0), 1)
+            # L2 regularization
+            vec_deriv = vec_deriv - self.reg_param * self.item_vectors
+            
+        return (vec_deriv, bias_deriv)
     
     def log_likelihood(self):
         loglik = 0
@@ -227,36 +231,42 @@ logMF.train_model()
 
 # Predictions
 P=logMF.predict()
-results=test_predictions(P,key,trainset,testset,replacement=0.0313503918798985)
+rep=np.mean(trainset["CLICK"])
+results=test_predictions(P,key,trainset,testset,replacement=rep)
 
 
 # Get Train RMSE
-
 def trainRMSE(P,clicks,received):
     #Takes P matrix, clicks matrix and received matrix and outputs train RMSE
     P=logMF.predict()
     e=clicks-P
-    e= np.multiply(e, received)
+    e=np.square(e)
+    e=received.multiply(e)
+    RMSE=np.mean(e)
+    RMSE=np.power(RMSE,0.5)
+    return RMSE
+
+# Get Test Predictions and Test RMSE
+def testRMSE(results):
+    #Takes results dataframe and outputs RMSE
+    p=results["PROBABILITY"]
+    click=results["CLICK"]
+    e=click-p
     e=np.square(e)
     RMSE=np.mean(e)
     RMSE=np.power(RMSE,0.5)
     return RMSE
 
 trainRMSE(P,clicks,received)
-
-# Get Test Predictions and Test RMSE
-
-def testRMSE(results):
-    #Takes results dataframe and outputs RMSE
-    p=results["PROBABILITY"]
-    click=results["CLICK"]
-    e=click-p
-    e*=e
-    RMSE=np.mean(e)
-    RMSE=np.power(RMSE,0.5)
-    return RMSE
-
 testRMSE(results)
+# For 100.000 obs:  0.08395161109337633 (once)
+# For 1.000.000 obs: 0.1615860707352471
+
+# Compare to baselines
+
+from BaselinePredictions import baselines 
+baselines(trainset,testset)
+
 
 #%% CROSS-VALIDATION
 import itertools
@@ -266,7 +276,7 @@ from sklearn.model_selection import KFold
 ## Preparing parameters combinations
 fs=[1]                    # number of latent factors (f)
 lambdas=[1,1.1,1.2,1.3,1.4]     # reg param (lamba)
-deltas=[0.2,0.3,0.5,0.6,1,1]            # learning rate (delta)
+deltas=[0.2,0.3,0.5,0.6,1]            # learning rate (delta)
 # Calculate cartesian product of parameter values to try
 param_combs=list(itertools.product(fs,lambdas,deltas))                                               
 # Preparing to store probability matrices
