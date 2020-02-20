@@ -33,6 +33,37 @@ llh <- function(x){
   return(1 / (1 + exp(-x)))
 }
 
+logllh1 <- function(x){
+  return(log(1+exp(-x)))
+}
+
+logllh0 <- function(x){
+  return(x + log(1+exp(-x)))
+}
+
+trainTest <- function(df){
+  names(df) <- c("USERID_ind", "OFFERID_ind", "CLICK")
+  #1. Make the test train split (test is 1)
+  df$train_test <- rbinom(n = nrow(df), size = 1, prob = 0.2)
+  
+  #2. Create new indices. Make sure test is at bottom
+  df <- df[order(df$train_test, df$OFFERID_ind), ]
+  df <- df %>% 
+    mutate(OFFERID_indN = group_indices(., factor(OFFERID_ind, levels = unique(OFFERID_ind))))
+  df <- df[order(df$train_test, df$USERID_ind), ]
+  df <- df %>% 
+    mutate(USERID_indN = group_indices(., factor(USERID_ind, levels = unique(USERID_ind))))
+  
+  #3. Split sets
+  df_test <- df[as.logical(df$train_test), ]
+  df_train <- df[!(as.logical(df$train_test)), ]
+  
+  #4. Return
+  output <- list("df_train" = df_train, "df_test" = df_test)
+  return(output)
+}
+
+
 #' Main algorithm for attaining alpha, beta, C and D
 #'
 #' @param df Dataframe consisting of userid, orderid and click. Id's should run continuously
@@ -45,7 +76,7 @@ llh <- function(x){
 #' @param iter Iterlation limit
 #'
 #' @return returns parameters alpha, beta, C and D
-mainAlg <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, iter) {
+parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, iter) {
   names(df) <- c("USERID_ind", "OFFERID_ind", "CLICK")
   # Because Thijs' code uses matrix
   df <- as.matrix(df)
@@ -67,6 +98,9 @@ mainAlg <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai,
   #Retrieve indices for y=1 and y=0 from the input data
   y1 <- df[which(df[ ,3] == 1), c("USERID_ind", "OFFERID_ind")]
   y0 <- df[which(df[ ,3] == 0), c("USERID_ind", "OFFERID_ind")]
+  
+  # Keeping track of likelihoods
+  logllh <- rep(NA, (iter+1))
   
   run <- 0
   while (run <= iter) {
@@ -117,10 +151,17 @@ mainAlg <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai,
     
     run <- run + 1
     
+    tic("Calculating logllh")
+    # Log Likelihood of PREVIOUS iteration
+    logllh[run] <- sum(logllh1(gamma0[y1])) + sum(logllh0(gamma0[y0])) + 
+      priorlambdau/2 * norm(C)^2 + priorlambdai/2 * norm(D)^2
+    toc()
+  
+    
     toc()
   }
   
-  output <- list("alpha" = alpha, "beta" = beta, "C" = C, "D" = D)
+  output <- list("alpha" = alpha, "beta" = beta, "C" = C, "D" = D, "logllh" = logllh)
   return(output)
 }
 
@@ -135,7 +176,7 @@ mainAlg <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai,
 #' @param uniqueI basically a vector used as a dictionary
 #'
 #' @return dataframe including predictions, NA for unknown user/item
-getPredict <- function(df, alpha, beta, C, D, inTrainU, inTrainI){
+getPredictOLD <- function(df, alpha, beta, C, D, inTrainU, inTrainI){
   tic("Prediction")
   
   tic()
@@ -145,7 +186,7 @@ getPredict <- function(df, alpha, beta, C, D, inTrainU, inTrainI){
   gamma <- low_rankC %*% t(low_rankD)
   
   # Marking offer/items that are non existent
-  df$nonMiss <- (df[,1] %in% inTrainU && df[,2] %in% inTrainI)
+  df$nonMiss <- (df[,1] %in% inTrainU & df[,2] %in% inTrainI)
   
   # Predicting for the non missing ones
   df$prediction <- NA
@@ -171,7 +212,7 @@ getPredict <- function(df, alpha, beta, C, D, inTrainU, inTrainI){
 #' @param uniqueI basically a vector used as a dictionary
 #'
 #' @return dataframe including predictions, NA for unknown user/item
-getPredict2 <- function(df, alpha, beta, C, D){
+getPredict <- function(df, alpha, beta, C, D){
   tic("Prediction")
   
   # By using the size of C and D, we can infer which obs are missing in training
@@ -184,20 +225,51 @@ getPredict2 <- function(df, alpha, beta, C, D){
   gamma <- low_rankC %*% t(low_rankD)
   
   # Marking offer/items that are non existent
-  df$nonMiss <- (df[,1]  <= maxU && df[,2] <= maxI)
+  df$nonMiss <- ((df[ ,1]  <= maxU) & (df[ ,2] <= maxI))
   
-  # Predicting for the non missing ones
+  # Predicting for the non missing ones (NA for non missings)
   df$prediction <- NA
   # Get the non missing indices
-  nonMiss <- as.matrix(df[df$nonMiss, c("USERID_ind", "OFFERID_ind")])
+  nonMiss <- as.matrix(df[df$nonMiss, c(1, 2)])
   df$prediction[df$nonMiss] <- llh(gamma[nonMiss])
   
   # Predicting for the missing ones
-  df$prediction[!df$nonMiss] <- NA
+  #df$prediction[!df$nonMiss] <- NA
   
   toc()
   return(df)
 }
+
+fullAlg <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, iter){
+  tic("Total time")
+  # Train test split
+  tic("1. Train test split")
+  df_train <- trainTest(df)$df_train[ ,c("USERID_indN", "OFFERID_indN", "CLICK")]
+  df_test <- trainTest(df)$df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK")]
+  toc()
+  
+  # Estimating parameters
+  tic("2. Estimating parameters")
+  pars <- parEst(df_train, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, iter)
+  toc()
+  
+  # Getting predictions
+  tic("3. Getting predictions")
+  results <- getPredict(df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK")], 
+                        pars$alpha, pars$beta, pars$C, pars$D)
+  toc()
+  
+  # RMSE
+  results$prediction[is.na(results$prediction)] <- 0
+  RMSE <- sqrt(mean((results$prediction - results$CLICK)^2))
+  
+  # Output
+  output <- list("parameters" = pars, "prediction" = results, "RMSE" = RMSE)
+  toc()
+  return(output)
+}
+
+
 
 
 # Preparing data ----------------------------------------------------------------------
@@ -235,6 +307,22 @@ df_train <- df_train[!duplicated(df_train[c("USERID", "OFFERID")]), c("USERID_in
 #5.Save train
 saveRDS(df_train, "/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
 
+
+
+# Train/test predictions -----------------------------------------------------------------
+# Use "Preparing data" first to get the df_train object
+df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
+
+# Setting parameters
+factors <- 2
+priorsdu <- 2.5
+priorsdi <- 2.5
+priorlambdau <- 1/priorsdu
+priorlambdai <- 1/priorsdi
+iter <- 0
+
+output <- fullAlg(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, iter)
+
 # Final predictions ----------------------------------------------------------------------
 # If you want predictions for the final set
 
@@ -250,66 +338,7 @@ priorsdi <- 1
 priorlambdau <- 1/priorsdu
 priorlambdai <- 1/priorsdi
 
-pars <- mainAlg(df_train[ ,c("USERID_ind", "OFFERID_ind", "CLICK")], 
+pars <- getPars(df_train[ ,c("USERID_ind", "OFFERID_ind", "CLICK")], 
                 factors, priorsdu, priorsdi, priorlambdau, priorlambdai)
 
-#Creating vectors that show which indices are in the training data
-inTrainU <- unique(df_train$USERID_ind)
-inTrainI <- unique(df_train$OFFERID_ind)
-
-gameResults <- getPredict(df_test, pars$alpha, pars$beta, pars$C, pars$D, inTrainU, inTrainI)
-
-
-# Train/test predictions -----------------------------------------------------------------
-# This is how you make your own train/test split
-
-#1. Import the train set
-df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
-
-#2. Make the test train split (test is 1)
-df$train_test <- rbinom(n = nrow(df), size = 1, prob = 0.2)
-
-#3. Create new indices. Make sure test is at bottom
-df <- df[order(df$train_test, df$OFFERID_ind), ]
-df <- df %>% 
-  mutate(OFFERID_indN = group_indices(., factor(OFFERID_ind, levels = unique(OFFERID_ind))))
-df <- df[order(df$train_test, df$USERID_ind), ]
-df <- df %>% 
-  mutate(USERID_indN = group_indices(., factor(USERID_ind, levels = unique(USERID_ind))))
-
-#4. Split sets
-df_test <- df[as.logical(df$train_test), ]
-df_train <- df[!(as.logical(df$train_test)), ]
-
-#Hyperparameters
-factors <- 2
-priorsdu <- 2.5
-priorsdi <- 2.5
-priorlambdau <- 1/priorsdu
-priorlambdai <- 1/priorsdi
-
-#Algorithm function call
-pars <- mainAlg(df_train[ ,c("USERID_indN", "OFFERID_indN", "CLICK")], 
-                factors, priorsdu, priorsdi, priorlambdau, priorlambdai, iter = 0)
-
-# 4. Prediction
-#Creating vectors that show which indices are in the training data
-inTrainU <- unique(df_train$USERID_indN)
-inTrainI <- unique(df_train$OFFERID_indN)
-
-# Prediction function call
-results <- getPredict(df_test[ ,c("USERID_indN", "OFFERID_indN")], 
-                      pars$alpha, pars$beta, pars$C, pars$D, inTrainU, inTrainI)
-
-max(df_train$OFFERID_indN)
-length(unique(df_train$OFFERID_indN))
-
-max(df_train$USERID_indN)
-length(unique(df_train$USERID_indN))
-
-
-
-##TEST
-
-
-
+gameResults <- getPredict(df_test, pars$alpha, pars$beta, pars$C, pars$D)
