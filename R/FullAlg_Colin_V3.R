@@ -84,10 +84,9 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
   }
   
   # Create new indices. Make sure test is at bottom
-  df <- df[order(df$train_test, df$OFFERID_ind), ]
+  df <- df[order(df$train_test), ]
   df <- df %>% 
     mutate(OFFERID_indN = group_indices(., factor(OFFERID_ind, levels = unique(OFFERID_ind))))
-  df <- df[order(df$train_test, df$USERID_ind), ]
   df <- df %>% 
     mutate(USERID_indN = group_indices(., factor(USERID_ind, levels = unique(USERID_ind))))
   
@@ -118,8 +117,8 @@ initChoose <- function(df, factors, priorsdu, priorsdi, initType){
   # Formatting
   names(df) <- c("USERID_ind", "OFFERID_ind", "CLICK")
   
-  nu <- max(df[ ,1])
-  ni <- max(df[ ,2])
+  nu <- max(df[ ,"USERID_ind"])
+  ni <- max(df[ ,"OFFERID_ind"])
   
   # 0 for alpha and beta. Normal for C and D with mean 0
   if (initType == 1){ 
@@ -230,10 +229,11 @@ initChoose <- function(df, factors, priorsdu, priorsdi, initType){
 #' @param priorlambdau Prior for lambda for norm C
 #' @param priorlambdai Prior for lambda for norm D
 #' @param iter Iterlation limit
+#' @param epsilon Convergence criteria
 #'
 #' @return returns parameters alpha, beta, C and D
 parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, iter, 
-                   initType, llh, rmse, df_test=NULL) {
+                   initType, llh, rmse, df_test=NULL, epsilon=NULL) {
   names(df) <- c("USERID_ind", "OFFERID_ind", "CLICK")
   
   # Initialization
@@ -247,9 +247,9 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
   
   # Because Thijs' code uses matrix
   df <- as.matrix(df)
-  
-  nu <- length(unique(df[ ,"USERID_ind"]))
-  ni <- length(unique(df[ ,"OFFERID_ind"]))
+
+  nu <- max(df[,"USERID_ind"])
+  ni <- max(df[,"OFFERID_ind"])
   
   #Retrieve indices for y=1 and y=0 from the input data
   y1 <- df[which(df[ ,"CLICK"] == 1), c("USERID_ind", "OFFERID_ind")]
@@ -263,13 +263,17 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
   
   run <- 1
   
+  if (!is.null(epsilon) || llh) {
+    logllh_old <- sum(logllh1(gamma_y1)) + sum(logllh0(gamma_y0)) + 
+      priorlambdau/2 * norm(C, type="F")^2 + priorlambdai/2 * norm(D, type="F")^2
+  }
+  
   if (llh) {
     # Keeping track of likelihoods
     logllh <- rep(NA, (iter+1))
     
     # Calculate log likelihood
-    logllh[run] <- sum(logllh1(gamma_y1)) + sum(logllh0(gamma_y0)) + 
-      priorlambdau/2 * norm(C)^2 + priorlambdai/2 * norm(D)^2
+    logllh[run] <- logllh_old
   } else{
     logllh <- NA
   }
@@ -308,8 +312,6 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
     
     #Turn this matrix to sparse, notice that the dims had to be manually set
     # (for missing items probably)
-    # sparse <- sparseMatrix(i = df01$USERID_ind, j = df01$OFFERID_ind,
-    #                        x = df01$deriv, dims = c(nu, ni))
     sparse <- sparseMatrix(i = (df01[ ,"USERID_ind"]), j = (df01[ ,"OFFERID_ind"]),
                            x = df01[ ,"deriv"], dims = c(nu, ni))
     
@@ -345,10 +347,17 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
     gamma_y1 <- get_gamma0(y1[,1], y1[,2], alpha, beta, C, D)
     gamma_y0 <- get_gamma0(y0[,1], y0[,2], alpha, beta, C, D)
     
+    if (run>2 && !is.null(epsilon)) {
+      logllh_old <- logllh_new
+    }
+    
+    if (!is.null(epsilon) || llh) {
+      logllh_new <- sum(logllh1(gamma_y1)) + sum(logllh0(gamma_y0)) +
+        priorlambdau / 2 * norm(C, type = "F") ^ 2 + priorlambdai / 2 * norm(D, type = "F") ^ 2
+    }
     if (llh){
       # Log Likelihood of current iteration
-      logllh[run] <- sum(logllh1(gamma_y1)) + sum(logllh0(gamma_y0)) + 
-        priorlambdau/2 * norm(C)^2 + priorlambdai/2 * norm(D)^2
+      logllh[run] <- logllh_new
     }
     
     if (rmse){
@@ -360,8 +369,11 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
       
       rmse_it[run] <- sqrt(mean((predictions - actuals)^2))
     }
-    
     toc()
+    
+    if (!is.null(epsilon)) {
+      if (abs((logllh_new-logllh_old)/logllh_old) < epsilon) break
+    }
   }
   
   output <- list("alpha" = alpha, "beta" = beta, "C" = C, "D" = D, "logllh" = logllh, 
@@ -585,15 +597,21 @@ df_test <- df[is.na(df$CLICK), ]
 df_train <- df[!(is.na(df$CLICK)), ]
 
 # Save. Use the df_train.RDS file in CV
-saveRDS(df_train, "/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
-saveRDS(df_test, "/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_test")
+# saveRDS(df_train, "/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
+# saveRDS(df_test, "/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_test")
+
+saveRDS(df_train, "~/Google Drive/Seminar 2020/Data/df_train")
+saveRDS(df_test, "~/Google Drive/Seminar 2020/Data/df_test")
+
 
 # Train/test pred. -----------------------------------------------------------------
 # Makes predictions for a train/test split for the FULL training set
 # Also, includes columns/rows with only 0 or 1
 
 # Use "Preparing data" first to get the df_train object
-df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
+#df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
+df <- readRDS("~/Google Drive/Seminar 2020/Data/df_train")
+
 
 # Setting parameters
 factors <- 2
@@ -613,7 +631,7 @@ rm("split")
 toc()
 
 output <- fullAlg(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau, 
-                  priorlambdai, iter, initType, onlyVar)
+                  priorlambdai, iter, initType, onlyVar, llh = TRUE, rmse = TRUE)
 
 # Visualization
 hist(output$prediction$prediction)
