@@ -8,6 +8,7 @@ library(tictoc)
 library(bigmemory)
 library(RcppArmadillo)
 library(Rcpp)
+library(ggplot2)
 
 sourceCpp("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/gammaui.cpp")
 #sourceCpp("~/Dropbox/Uni/Master_Econometrie/Blok_3/Seminar2020/R/gammaui.cpp")
@@ -59,7 +60,7 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
   # In case of cross validation (recode to zeros and one's for ease)
   if (cv){
     df$train_test <- 0
-    df$traintest[ind == fold] <- 1
+    df$train_test[ind == fold] <- 1
   }
   
   df$prediction <- NA
@@ -454,7 +455,7 @@ fullAlg <- function(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau
   # Calculate confusion matrix
   tresh <- 0.02192184 # average click rate
   results$predictionBin <- rep(0, length(results$prediction))
-  results$predictionBin[results$prediction> tresh] <- 1
+  results$predictionBin[results$prediction > tresh] <- 1
   
   # True positives:
   TP <- sum(results$predictionBin == 1 & results$CLICK == 1)
@@ -473,15 +474,17 @@ fullAlg <- function(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau
 crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter){
   
   # Initialize a multidimensional output array
-  # Rows are all the possible permutations of the huperparameters
-  rows <- length(ONLYVAR) * length(FACTORS) * length(PRIORS) * length(INITTYPE)
+  # Rows are all the possible permutations of the huperparameters * folds
+  rows <- (length(ONLYVAR) * length(FACTORS) * length(PRIORS) * length(INITTYPE)) * folds
   
-  # Columns for the hyperparameters, and then all the results you want
+  # Columns for the hyperparameters, plus a name variable, and then all the results you want
   # these are: rmse, TP (true positive(1)), TN, FP, FN
-  columns <- 4 + 5
+  columns <- 4 + 1 + 5
   
-  # Initialize the array (depth is the number of folds)
-  CVoutput <- array(NA, dim = c(rows, columns, folds))
+  # Initialize the df (depth is the number of folds)
+  CVoutput <- data.frame(matrix(NA, nrow = rows, ncol = columns))
+  names(CVoutput) <- c("Factor", "PriorS", "initType", "onlyVar", "Specification",
+                       "RMSE", "TP", "TN", "FP", "FN")
   
   # Now we loop
   # First we make the folds
@@ -491,10 +494,10 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter){
   # Then assign 1-5 fold indices
   foldInd <- cut(seq(1, nrow(df)), breaks = folds, labels = FALSE)
   
+  row <- 1
   # Looping over your folds
   for (z in 1:folds){
     # Do onlyvar first because the train test split depends on it
-    row <- 1
     for (a in 1:length(ONLYVAR)){
       # Do onlyvar first because the train test split depends on it
       onlyVar <- ONLYVAR[a]
@@ -523,17 +526,22 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter){
                               priorlambdai, iter, initType)
             )
             # Fill the array with output
-            CVoutput[row, 1, z] <- factors
-            CVoutput[row, 2, z] <- priorsdu
-            CVoutput[row, 3, z] <- initType
-            CVoutput[row, 4, z] <- onlyVar
+            CVoutput[row, 1] <- factors
+            CVoutput[row, 2] <- priorsdu
+            CVoutput[row, 3] <- initType
+            CVoutput[row, 4] <- onlyVar
+            
+            # The name
+            CVoutput[row, 5] <- paste("Factor = ", factors, "PriorS = ", priorsdu, 
+                                         "initType = ", initType, "onlyVar" = onlyVar,
+                                         sep = "")
             
             # Performance variables
-            CVoutput[row, 5, z] <- output$RMSE
-            CVoutput[row, 6, z] <- output$confusion$TP
-            CVoutput[row, 7, z] <- output$confusion$TN
-            CVoutput[row, 8, z] <- output$confusion$FP
-            CVoutput[row, 9, z] <- output$confusion$TP
+            CVoutput[row, 6] <- output$RMSE
+            CVoutput[row, 7] <- output$confusion$TP
+            CVoutput[row, 8] <- output$confusion$TN
+            CVoutput[row, 9] <- output$confusion$FP
+            CVoutput[row, 10] <- output$confusion$TP
             
             row <- row+1
             toc()
@@ -686,14 +694,19 @@ FACTORS <- c(2, 3)
 PRIORS <- c(2, 4)
 INITTYPE <- c(4)
 ONLYVAR <- c(TRUE, FALSE)
-folds <- 5
-iter <- 10
+folds <- 2
+iter <- 20
 
 CVoutput <- crossValidate(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter)
 
 # Visualizing output
+CVoutput$Specification <- as.factor(CVoutput$Specification)
 
+p <- ggplot(CVoutput, aes(x=Specification, y=RMSE)) + 
+  geom_boxplot()
+p
   
+CVoutput$RMSE
 # Final predictions ----------------------------------------------------------------------
 # If you want predictions for the final set
 
