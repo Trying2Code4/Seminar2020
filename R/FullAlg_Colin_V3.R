@@ -85,10 +85,9 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
   
   tic("create new indices")
   # Create new indices. Make sure test is at bottom
-  df <- df[order(df$train_test, df$OFFERID_ind), ]
+  df <- df[order(df$train_test), ]
   df <- df %>% 
     mutate(OFFERID_indN = group_indices(., factor(OFFERID_ind, levels = unique(OFFERID_ind))))
-  df <- df[order(df$train_test, df$USERID_ind), ]
   df <- df %>% 
     mutate(USERID_indN = group_indices(., factor(USERID_ind, levels = unique(USERID_ind))))
   toc()
@@ -177,8 +176,8 @@ initChoose <- function(df, factors, priorsdu, priorsdi, initType){
   # Formatting
   names(df) <- c("USERID_ind", "OFFERID_ind", "CLICK")
   
-  nu <- max(df[ ,1])
-  ni <- max(df[ ,2])
+  nu <- max(df[ ,"USERID_ind"])
+  ni <- max(df[ ,"OFFERID_ind"])
   
   # 0 for alpha and beta. Normal for C and D with mean 0
   if (initType == 1){ 
@@ -306,9 +305,9 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
   
   # Because Thijs' code uses matrix
   df <- as.matrix(df)
-  
-  nu <- length(unique(df[ ,"USERID_ind"]))
-  ni <- length(unique(df[ ,"OFFERID_ind"]))
+
+  nu <- max(df[,"USERID_ind"])
+  ni <- max(df[,"OFFERID_ind"])
   
   #Retrieve indices for y=1 and y=0 from the input data
   y1 <- df[which(df[ ,"CLICK"] == 1), c("USERID_ind", "OFFERID_ind")]
@@ -550,15 +549,21 @@ df_test <- df[is.na(df$CLICK), ]
 df_train <- df[!(is.na(df$CLICK)), ]
 
 # Save. Use the df_train.RDS file in CV
-saveRDS(df_train, "/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
-saveRDS(df_test, "/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_test")
+# saveRDS(df_train, "/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
+# saveRDS(df_test, "/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_test")
+
+saveRDS(df_train, "~/Google Drive/Seminar 2020/Data/df_train")
+saveRDS(df_test, "~/Google Drive/Seminar 2020/Data/df_test")
+
 
 # Train/test pred. -----------------------------------------------------------------
 # Makes predictions for a train/test split for the FULL training set
 # Also, includes columns/rows with only 0 or 1
 
 # Use "Preparing data" first to get the df_train object
-df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
+#df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
+df <- readRDS("~/Google Drive/Seminar 2020/Data/df_train")
+
 
 # Setting parameters
 factors <- 2
@@ -578,7 +583,7 @@ rm("split")
 toc()
 
 output <- fullAlg(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau, 
-                  priorlambdai, iter, initType, onlyVar)
+                  priorlambdai, iter, initType, onlyVar, llh = TRUE, rmse = TRUE)
 
 # Visualization
 hist(output$prediction$prediction)
