@@ -83,7 +83,6 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
     df <- dplyr::bind_rows(df_train, df_test)
   }
   
-  tic("create new indices")
   # Create new indices. Make sure test is at bottom
   df <- df[order(df$train_test, df$OFFERID_ind), ]
   df <- df %>% 
@@ -91,76 +90,18 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
   df <- df[order(df$train_test, df$USERID_ind), ]
   df <- df %>% 
     mutate(USERID_indN = group_indices(., factor(USERID_ind, levels = unique(USERID_ind))))
-  toc()
   
-  tic("split sets")
   # Split sets
   df_test <- df[as.logical(df$train_test), ]
   df_train <- df[!(as.logical(df$train_test)), c("USERID_indN", "OFFERID_indN", "CLICK", 
                                                  "ratioU", "ratioO")]
-  toc()
   
   #4. Return
   output <- list("df_train" = df_train, "df_test" = df_test)
   return(output)
 }
 
-#' Create a train/test split, given a training set
-#'
-#' @param df df containing indices, click, and "ratio" columns (see "Preparing data")
-#' @param onlyVar logical variable speciying whether rows/columns without variation (only)
-#' zero's or one's are omitted
-#'
-#' @return returns a training set and the test set
-makeIndices <- function(df, onlyVar, trainData, testData){
-  # Formatting
-  names(df) <- c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")
-  
-  # Make the test train split (test is 1)
-  df$train_test <- rbinom(n = nrow(df), size = 1, prob = 0.2)
-  tic("Make new column")
-  df$prediction <- NA
-  toc()
-  # Deleting the rows/columns without variation
-  if (onlyVar) {
-    
-    # Split them (temporarily)
-    df_test <- df[as.logical(df$train_test), ]
-    df_train <- df[!(as.logical(df$train_test)), ]
-    
-    # Assign the 0 or 1 to test set obs where a ratio is 0 or 1 (prediction in advance)
-    df_test$prediction[(df_test$ratioU == 0 | df_test$ratioO == 0)] <- 0
-    df_test$prediction[(df_test$ratioU == 1 | df_test$ratioO == 1)] <- 1
-    
-    # Drop the train obs where a ratio is 0 or 1
-    df_train <- df_train[!(df_train$ratioU == 0 | df_train$ratioO == 0 | 
-                             df_train$ratioU == 1 | df_train$ratioO == 1), ]
-    
-    # Merge the two to make indices
-    df <- dplyr::bind_rows(df_train, df_test)
-  }
-  
-  tic("create new indices")
-  # Create new indices. Make sure test is at bottom
-  df <- df[order(df$train_test, df$OFFERID_ind), ]
-  df <- df %>% 
-    mutate(OFFERID_indN = group_indices(., factor(OFFERID_ind, levels = unique(OFFERID_ind))))
-  df <- df[order(df$train_test, df$USERID_ind), ]
-  df <- df %>% 
-    mutate(USERID_indN = group_indices(., factor(USERID_ind, levels = unique(USERID_ind))))
-  toc()
-  
-  tic("split sets")
-  # Split sets
-  df_test <- df[as.logical(df$train_test), ]
-  df_train <- df[!(as.logical(df$train_test)), c("USERID_indN", "OFFERID_indN", "CLICK", 
-                                                 "ratioU", "ratioO")]
-  toc()
-  
-  #4. Return
-  output <- list("df_train" = df_train, "df_test" = df_test)
-  return(output)
-}
+
 #' Gives initial estimates for alpha, beta, C and D
 #'
 #' @param df training df containing ONLY indices and click
@@ -517,6 +458,83 @@ fullAlg <- function(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau
   return(output)
 }
 
+crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter){
+  
+  # Initialize a multidimensional output array
+  # Rows are all the possible permutations of the huperparameters
+  rows <- length(ONLYVAR) * length(FACTORS) * length(PRIORS) * length(INITTYPE)
+  
+  # Columns for the hyperparameters, and then all the results you want
+  # these are: rmse, TP (true positive(1)), TN, FP, FN
+  columns <- 4 + 5
+  
+  # Initialize the array (depth is the number of folds)
+  CVoutput <- array(NA, dim = c(rows, columns, folds))
+  
+  # Now we loop
+  # First we make the folds
+  # Randomly shuffle the data
+  df <- df[sample(nrow(df)), ]
+  
+  # Then assign 1-5 fold indices
+  foldInd <- cut(seq(1, nrow(df)), breaks = folds, labels = FALSE)
+  
+  # Looping over your folds
+  for (z in 1:folds){
+    # Do onlyvar first because the train test split depends on it
+    row <- 1
+    for (a in 1:length(ONLYVAR)){
+      # Do onlyvar first because the train test split depends on it
+      onlyVar <- ONLYVAR[a]
+      
+      # Make the train test split by using the foldInd and fold as input (see trainTest)
+      set.seed(123)
+      split <- trainTest(df, onlyVar, cv = TRUE, ind = foldInd, fold = z)
+      df_train <-split$df_train[ ,c("USERID_indN", "OFFERID_indN", "CLICK")]
+      df_test <- split$df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK", "prediction")]
+      
+      # Loop the other hyperparameters
+      for (b in 1:length(FACTORS)){
+        for (c in 1:length(PRIORS)){
+          for (d in 1:length(INITTYPE)){
+            tic(paste("Run", row, "out of", rows, "in fold", z, "out of ", folds))
+            factors <- FACTORS[b]
+            priorsdu <- PRIORS[c]
+            priorsdi <- PRIORS[c]
+            initType <- INITTYPE[d]
+            priorlambdau <- 1/priorsdu
+            priorlambdai <- 1/priorsdi
+            
+            # Run the algorithm
+            invisible(
+            output <- fullAlg(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau, 
+                              priorlambdai, iter, initType)
+            )
+            # Fill the array with output
+            CVoutput[row, 1, z] <- factors
+            CVoutput[row, 2, z] <- priorsdu
+            CVoutput[row, 3, z] <- initType
+            CVoutput[row, 4, z] <- onlyVar
+            
+            # Performance variables
+            CVoutput[row, 5, z] <- output$RMSE
+            CVoutput[row, 6, z] <- output$confusion$TP
+            CVoutput[row, 7, z] <- output$confusion$TN
+            CVoutput[row, 8, z] <- output$confusion$FP
+            CVoutput[row, 9, z] <- output$confusion$TP
+            
+            row <- row+1
+            toc()
+          }
+        }
+      }
+    }
+  }
+  return(CVoutput)
+}
+
+
+
 # Preparing data -------------------------------------------------------------------------
 # This is how you should import the data.
 # The sequence here is important. We want to have a continuous sequence, starting at 1
@@ -653,75 +671,9 @@ ONLYVAR <- c(TRUE, FALSE)
 folds <- 5
 iter <- 10
 
-# Initialize a multidimensional output array
-# Rows are all the possible permutations of the huperparameters
-rows <- length(ONLYVAR) + length(FACTORS) + length(PRIORS) + length(INITTYPE)
+CVoutput <- crossValidate(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter)
 
-# Columns for the hyperparameters, and then all the results you want
-# these are: rmse, TP (true positive(1)), TN, FP, FN
-columns <- 4 + 5
-
-# Initialize the array (depth is the number of folds)
-CVoutput <- array(NA, dim = c(rows, columns, folds))
-
-# Now we loop
-# First we make the folds
-# Randomly shuffle the data
-df <- df[sample(nrow(df)), ]
-
-# Then assign 1-5 fold indices
-foldInd <- cut(seq(1, nrow(df)), breaks = folds, labels = FALSE)
-
-# Looping over your folds
-for (z in 1:folds){
-  # Do onlyvar first because the train test split depends on it
-  row <- 1
-  for (a in 1:length(ONLYVAR)){
-    # Do onlyvar first because the train test split depends on it
-    onlyVar <- ONLYVAR[a]
-    
-    # Make the train test split by using the foldInd and fold as input (see trainTest)
-    set.seed(123)
-    split <- trainTest(df, onlyVar, cv = TRUE, ind = foldInd, fold = z)
-    df_train <-split$df_train[ ,c("USERID_indN", "OFFERID_indN", "CLICK")]
-    df_test <- split$df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK", "prediction")]
-    
-    # Loop the other hyperparameters
-    for (b in 1:length(FACTORS)){
-      for (c in 1:length(PRIORS)){
-        for (d in 1:length(INITTYPE)){
-          
-          factors <- FACTORS[b]
-          priorsdu <- PRIORS[c]
-          priorsdi <- PRIORS[c]
-          initType <- INITTYPE[d]
-          priorlambdau <- 1/priorsdu
-          priorlambdai <- 1/priorsdi
-          
-          # Run the algorithm
-          output <- fullAlg(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau, 
-                            priorlambdai, iter, initType)
-          
-          # Fill the array with output
-          CVoutput[row, 1, z] <- factors
-          CVoutput[row, 2, z] <- priorsdu
-          CVoutput[row, 3, z] <- initType
-          CVoutput[row, 4, z] <- onlyVar
-          
-          # Performance variables
-          CVoutput[row, 5, z] <- output$RMSE
-          CVoutput[row, 6, z] <- output$confusion$TP
-          CVoutput[row, 7, z] <- output$confusion$TN
-          CVoutput[row, 8, z] <- output$confusion$FP
-          CVoutput[row, 9, z] <- output$confusion$TP
-          
-          row <- row+1
-        }
-      }
-    }
-  }
-}
-
+# Visualizing output
 
   
 # Final predictions ----------------------------------------------------------------------
