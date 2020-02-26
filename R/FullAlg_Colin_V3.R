@@ -33,62 +33,6 @@ logllh0 <- function(x){
   return(x + log(1 + exp(-x)))
 }
 
-#' Create a train/test split, given a training set
-#'
-#' @param df df containing indices, click, and "ratio" columns (see "Preparing data")
-#' @param onlyVar logical variable speciying whether rows/columns without variation (only)
-#' zero's or one's are omitted
-#'
-#' @return returns a training set and the test set
-trainTest <- function(df, onlyVar){
-  # Formatting
-  names(df) <- c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")
-  
-  # Make the test train split (test is 1)
-  df$train_test <- rbinom(n = nrow(df), size = 1, prob = 0.2)
-  tic("Make new column")
-  df$prediction <- NA
-  toc()
-  # Deleting the rows/columns without variation
-  if (onlyVar) {
-    
-    # Split them (temporarily)
-    df_test <- df[as.logical(df$train_test), ]
-    df_train <- df[!(as.logical(df$train_test)), ]
-    
-    # Assign the 0 or 1 to test set obs where a ratio is 0 or 1 (prediction in advance)
-    df_test$prediction[(df_test$ratioU == 0 | df_test$ratioO == 0)] <- 0
-    df_test$prediction[(df_test$ratioU == 1 | df_test$ratioO == 1)] <- 1
-    
-    # Drop the train obs where a ratio is 0 or 1
-    df_train <- df_train[!(df_train$ratioU == 0 | df_train$ratioO == 0 | 
-                             df_train$ratioU == 1 | df_train$ratioO == 1), ]
-    
-    # Merge the two to make indices
-    df <- dplyr::bind_rows(df_train, df_test)
-  }
-  
-  tic("create new indices")
-  # Create new indices. Make sure test is at bottom
-  df <- df[order(df$train_test, df$OFFERID_ind), ]
-  df <- df %>% 
-    mutate(OFFERID_indN = group_indices(., factor(OFFERID_ind, levels = unique(OFFERID_ind))))
-  df <- df[order(df$train_test, df$USERID_ind), ]
-  df <- df %>% 
-    mutate(USERID_indN = group_indices(., factor(USERID_ind, levels = unique(USERID_ind))))
-  toc()
-  
-  tic("split sets")
-  # Split sets
-  df_test <- df[as.logical(df$train_test), ]
-  df_train <- df[!(as.logical(df$train_test)), c("USERID_indN", "OFFERID_indN", "CLICK", 
-                                                 "ratioU", "ratioO")]
-  toc()
-  
-  #4. Return
-  output <- list("df_train" = df_train, "df_test" = df_test)
-  return(output)
-}
 
 #' Create a train/test split, given a training set
 #'
@@ -595,14 +539,6 @@ df_train <- df_train %>% distinct(USERID_ind, OFFERID_ind, .keep_all = TRUE)
 df_train <- df_train[ ,c("USERID_ind", "OFFERID_ind", "CLICK")]
 
 # Create ratios of CLICK per offer or user (== 1 or == 0 indicates no variation)
-df_sumUser <- df_train %>%
-  group_by(USERID_ind) %>%
-  summarise(ratioU = sum(CLICK)/n())
-
-df_sumOffer <- df_train %>%
-  group_by(OFFERID_ind) %>%
-  summarise(ratioO = sum(CLICK)/n() )
-
 df <- df %>%
   group_by(USERID_ind) %>%
   mutate(ratioU = mean(CLICK, na.rm = TRUE))
@@ -610,16 +546,6 @@ df <- df %>%
 df <- df %>%
   group_by(OFFERID_ind) %>%
   mutate(ratioO = mean(CLICK, na.rm = TRUE))
-
-# Bind the sets to link these ratio variables to the observations
-df <- rbind(df_train, df_test)
-
-# Merge the sets to get these variables
-# This takes long, but we only have to do it once
-df <- merge(x = df, y = df_sumUser, all.x = TRUE)
-df <- merge(x = df, y = df_sumOffer, all.x = TRUE)
-
-rm("df_sumUser", "df_sumOffer")
 
 # Split
 df_test <- df[is.na(df$CLICK), ]
