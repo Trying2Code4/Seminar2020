@@ -268,7 +268,7 @@ initChoose <- function(df, factors, priorsdu, priorsdi, initType){
     
     temp2[temp2 == 0] <- 0.01 # THINK ABOUT THIS
     temp2[temp2 == 1] <- 0.99 
-
+    
     beta <- as.matrix(-1 * log(1/temp2 - 1))
     
     C <- matrix(rnorm(nu * factors, 0, priorsdu), nu, factors)
@@ -370,7 +370,7 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
     
     #Calculating the H matrix for alpha update
     H_slr <- splr(sparse, low_rankC, low_rankD)
-
+    
     #Updating alpha and beta
     newalpha <- as.matrix((1/ni) * H_slr %*% rep(1, ni))
     
@@ -423,11 +423,6 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
                  "rmse" = rmse)
   return(output)
 }
-
-
-
-
-
 
 #' Get predictions for a test set
 #'
@@ -617,7 +612,7 @@ df_test <- split$df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK", "prediction
 rm("split")
 
 output2 <- fullAlg(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau, 
-                  priorlambdai, iter, initType, onlyVar, llh, rmse)
+                   priorlambdai, iter, initType, onlyVar, llh, rmse)
 
 # Visualization
 hist(output2$prediction$prediction)
@@ -662,9 +657,7 @@ testIndexes <- which(foldInd == i, arr.ind=TRUE)
 sample(1:folds, nrow(df), replace=T)
 for (z in 1:folds)
 
-
-
-
+  
 # Final predictions ----------------------------------------------------------------------
 # If you want predictions for the final set
 
@@ -717,18 +710,18 @@ sum(df_train$ratioU - df_trainOrg$ratioU)
 
 sum(is.na(df_train$ratioU))
 sum(is.na(df_trainOrg$ratioU))
-  
-  
-  
-  
-  
-  
-  
-  
-  
+
+
+
+
+
+
+
+
+
 alpha <- df %>%
-      group_by(USERID_ind) %>%
-      summarize(meanCLICK = mean(CLICK))
+  group_by(USERID_ind) %>%
+  summarize(meanCLICK = mean(CLICK))
 
 temp <- df %>%
   group_by(USERID_ind) %>%
@@ -749,7 +742,7 @@ alpha <- output$parameters$alpha
 beta <- output$parameters$beta
 
 test <- getPredict(df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK", "prediction")], 
-                      alpha, beta, C, D)
+                   alpha, beta, C, D)
 
 test$prediction[is.na(test$prediction)] <- 0
 
