@@ -9,8 +9,8 @@ library(bigmemory)
 library(RcppArmadillo)
 library(Rcpp)
 
-#sourceCpp("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/gammaui.cpp")
-sourceCpp("~/Dropbox/Uni/Master_Econometrie/Blok_3/Seminar2020/R/gammaui.cpp")
+sourceCpp("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/gammaui.cpp")
+#sourceCpp("~/Dropbox/Uni/Master_Econometrie/Blok_3/Seminar2020/R/gammaui.cpp")
 
 
 # Functions/tools ------------------------------------------------------------------------
@@ -329,17 +329,21 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
     # Calculate log likelihood
     logllh[run] <- sum(logllh1(gamma_y1)) + sum(logllh0(gamma_y0)) + 
       priorlambdau/2 * norm(C)^2 + priorlambdai/2 * norm(D)^2
+  } else{
+    logllh <- NA
   }
   
   if (rmse){
     # Keeping track of rmse
-    rmse <- rep(NA, (iter+1))
+    rmse_it <- rep(NA, (iter+1))
     temp <- getPredict(df_test, alpha, beta, C, D)
     predictions <- temp$prediction
     predictions[is.na(predictions)] <- 0
     actuals <- temp$CLICK
     
     rmse[run] <- sqrt(mean((predictions - actuals)^2))
+  } else{
+    rmse_it <- NA
   }
   
   while (run <= iter) {
@@ -413,14 +417,14 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
       predictions[is.na(predictions)] <- 0
       actuals <- temp$CLICK
       
-      rmse[run] <- sqrt(mean((predictions - actuals)^2))
+      rmse_it[run] <- sqrt(mean((predictions - actuals)^2))
     }
     
     toc()
   }
   
   output <- list("alpha" = alpha, "beta" = beta, "C" = C, "D" = D, "logllh" = logllh, 
-                 "rmse" = rmse)
+                 "rmse" = rmse_it)
   return(output)
 }
 
@@ -481,8 +485,7 @@ getPredict <- function(df, alpha, beta, C, D){
 #'
 #' @examples
 fullAlg <- function(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau, 
-                    priorlambdai, iter, initType, onlyVar, llh=FALSE, rmse=FALSE){
-  
+                    priorlambdai, iter, initType, llh=FALSE, rmse=FALSE){
   # Estimating parameters
   tic("2. Estimating parameters")
   pars <- parEst(df_train, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, iter, 
@@ -500,8 +503,22 @@ fullAlg <- function(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau
   results$prediction[is.na(results$prediction)] <- 0
   RMSE <- sqrt(mean((results$prediction - results$CLICK)^2))
   
+  # Calculate confusion matrix
+  tresh <- 0.02192184 # average click rate
+  results$predictionBin <- rep(0, length(results$prediction))
+  results$predictionBin[results$prediction> tresh] <- 1
+  
+  # True positives:
+  TP <- sum(results$predictionBin == 1 & results$CLICK == 1)
+  TN <- sum(results$predictionBin == 0 & results$CLICK == 0)
+  FP <- sum(results$predictionBin == 1 & results$CLICK == 0)
+  FN <- sum(results$predictionBin == 0 & results$CLICK == 1)
+  
+  confusion <- list("TP" = TP, "TN" = TN, "FP" = FP, "FN" = FN)
+  
   # Output
-  output <- list("parameters" = pars, "prediction" = results, "RMSE" = RMSE)
+  output <- list("parameters" = pars, "prediction" = results, "RMSE" = RMSE, 
+                 "confusion" = confusion)
   return(output)
 }
 
@@ -603,7 +620,7 @@ priorsdu <- 2.5
 priorsdi <- 2.5
 priorlambdau <- 1/priorsdu
 priorlambdai <- 1/priorsdi
-iter <- 1000
+iter <- 10
 initType <- 4
 onlyVar <- TRUE
 llh <- TRUE
@@ -617,50 +634,104 @@ df_test <- split$df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK", "prediction
 rm("split")
 
 output2 <- fullAlg(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau, 
-                  priorlambdai, iter, initType, onlyVar, llh, rmse)
+                  priorlambdai, iter, initType, llh, rmse)
+
+output3 <- fullAlg(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau, 
+                   priorlambdai, iter, initType)
+
+sum(output3$prediction$predictionBin)
+
+TP <- sum(output3$prediction$predictionBin == 1 && output3$prediction$CLICK == 1)
+output3$prediction$predictionBin == 1 & output3$prediction$CLICK == 1
 
 # Visualization
 hist(output2$prediction$prediction)
 xdata <- seq(1, iter+1)
 plot(xdata, output2$parameters$logllh, col="blue")
-plot(xdata, output2$parameters$rmse, col="red")
+plot(xdata, output2$parameters$rmse_it, col="red")
 
 # Cross validation -----------------------------------------------------------------------
 # Import train set
 df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
+df <- df[df$USERID_ind < 10000, ]
 
 # Input whichever hyperparameters you want to test
 FACTORS <- c(2, 3)
-PRIORSDU <- c(2, 4)
-PRIORSDI <- c(2, 4)
+PRIORS <- c(2, 4)
 INITTYPE <- c(4)
 ONLYVAR <- c(TRUE, FALSE)
-folds <- 10
+folds <- 5
+iter <- 10
 
-# Initialize output df
-rows <- length(FACTORS) + length(PRIORSDU) + length(PRIORSDI) + length(INITTYPE) + 
-  length(ONLYVAR)
-columns <- 5 + folds + 1
+# Initialize a multidimensional output array
+# Rows are all the possible permutations of the huperparameters
+rows <- length(ONLYVAR) + length(FACTORS) + length(PRIORS) + length(INITTYPE)
 
-outputRMSE <- data.frame(matrix(NA, nrow = rows, ncol = columns))
+# Columns for the hyperparameters, and then all the results you want
+# these are: rmse, TP (true positive(1)), TN, FP, FN
+columns <- 4 + 5
 
-# Creating the folds
-# Randomly shuffle your rows
+# Initialize the array (depth is the number of folds)
+CVoutput <- array(NA, dim = c(rows, columns, folds))
+
+# Now we loop
+# First we make the folds
+# Randomly shuffle the data
 df <- df[sample(nrow(df)), ]
 
-# Create fold indices
+# Then assign 1-5 fold indices
 foldInd <- cut(seq(1, nrow(df)), breaks = folds, labels = FALSE)
 
 # Looping over your folds
 for (z in 1:folds){
-  testIndexes <- which(foldInd == i, arr.ind=TRUE)
-  testData <- yourdata[testIndexes, ]
-  trainData <- yourdata[-testIndexes, ]
-  
+  # Do onlyvar first because the train test split depends on it
+  row <- 1
+  for (a in 1:length(ONLYVAR)){
+    # Do onlyvar first because the train test split depends on it
+    onlyVar <- ONLYVAR[a]
+    
+    # Make the train test split by using the foldInd and fold as input (see trainTest)
+    set.seed(123)
+    split <- trainTest(df, onlyVar, cv = TRUE, ind = foldInd, fold = z)
+    df_train <-split$df_train[ ,c("USERID_indN", "OFFERID_indN", "CLICK")]
+    df_test <- split$df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK", "prediction")]
+    
+    # Loop the other hyperparameters
+    for (b in 1:length(FACTORS)){
+      for (c in 1:length(PRIORS)){
+        for (d in 1:length(INITTYPE)){
+          
+          factors <- FACTORS[b]
+          priorsdu <- PRIORS[c]
+          priorsdi <- PRIORS[c]
+          initType <- INITTYPE[d]
+          priorlambdau <- 1/priorsdu
+          priorlambdai <- 1/priorsdi
+          
+          # Run the algorithm
+          output <- fullAlg(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau, 
+                            priorlambdai, iter, initType)
+          
+          # Fill the array with output
+          CVoutput[row, 1, z] <- factors
+          CVoutput[row, 2, z] <- priorsdu
+          CVoutput[row, 3, z] <- initType
+          CVoutput[row, 4, z] <- onlyVar
+          
+          # Performance variables
+          CVoutput[row, 5, z] <- output$RMSE
+          CVoutput[row, 6, z] <- output$confusion$TP
+          CVoutput[row, 7, z] <- output$confusion$TN
+          CVoutput[row, 8, z] <- output$confusion$FP
+          CVoutput[row, 9, z] <- output$confusion$TP
+          
+          row <- row+1
+        }
+      }
+    }
+  }
 }
-testIndexes <- which(foldInd == i, arr.ind=TRUE)
-sample(1:folds, nrow(df), replace=T)
-for (z in 1:folds)
+
 
 
 
