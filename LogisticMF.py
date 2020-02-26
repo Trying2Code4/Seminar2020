@@ -17,11 +17,12 @@ import scipy.sparse as sp
 import os
 os.chdir("/Users/matevaradi/Documents/ESE/Seminar/Seminar2020")
 import matplotlib.pyplot as plt
+from numba import jit
 
 #Get a subset of the data from TrainTestSmall
 #from TrainTestSmall import trainset,testset
-from Tools import encoder, test_predictions, train_test, get_test_pred
-trainset,testset=train_test(100000)
+from Tools import encoder, test_predictions, train_test, get_test_pred,test_predictions2
+trainset,testset=train_test(1000000)
 # 32173022 to use full
 
 # Optional: Filter for users that have at least one click
@@ -39,7 +40,7 @@ clicks=sp.csr_matrix((formatted["click"], (formatted["user"], formatted["item"])
 #Load ones where there was an observation
 received=sp.csr_matrix((np.ones(len(formatted["user"])),(formatted["user"],formatted["item"])))
 #%%  
-## INTERMEZZO: how to deal with sparse matrixes
+## INTERMEZZO 1: how to deal with sparse matrixes
 
 #Load our data to sprase format
 sprs=sp.csr_matrix((formatted["click"], (formatted["user"], formatted["item"])))
@@ -65,6 +66,45 @@ M= sprs.multiply(R2)
 M.toarray()
 M.shape
 
+#%% INTERMEZZO 2: Numba
+from numba import jit
+x = np.arange(100000000).reshape(10000, 10000)
+
+def go_slow(a): 
+    trace = 0
+    for i in range(a.shape[0]):   
+        trace += np.tanh(a[i, i]) 
+    return a + trace  
+
+# Time it without Numba:
+start = time.time()
+go_slow(x)
+end = time.time()
+print("Elapsed (with compilation) = %s" % (end - start))       
+
+
+from numba import jit,njit
+@jit(nopython=True) # Set "nopython" mode for best performance, equivalent to @njit
+@jit
+@jit(nopython=True)
+def go_fast(a): # Function is compiled and runs in machine code
+    trace = 0
+    for i in range(a.shape[0]):
+        trace += np.tanh(a[i, i])
+    return a + trace
+
+# DO NOT REPORT THIS... COMPILATION TIME IS INCLUDED IN THE EXECUTION TIME!
+start = time.time()
+go_fast(x)
+end = time.time()
+print("Elapsed (with compilation) = %s" % (end - start))
+
+# NOW THE FUNCTION IS COMPILED, RE-TIME IT EXECUTING FROM CACHE
+start = time.time()
+go_fast(x)
+end = time.time()
+print("Elapsed (after compilation) = %s" % (end - start))
+
 
 #%% LOGISTIC MATRIX FACTORIZATION
 
@@ -81,7 +121,8 @@ class LogisticMF():
         self.reg_param = reg_param       #lambda
         self.lrate = lrate               #learning rate
         self.stochastic= stochastic      #stochastic gradient descent or full
-
+    
+    @jit
     def train_model(self):
 
         self.ones = np.ones((self.num_users, self.num_items))
@@ -150,7 +191,7 @@ class LogisticMF():
             print("User gradient norm: ",self.convergence[i,1])
             print("Item gradient norm: ",self.convergence[i,2])
 
-
+    @jit
     def deriv(self, user):
         if user:
             vec_deriv = self.clicks.dot(self.item_vectors) #
@@ -181,6 +222,7 @@ class LogisticMF():
             vec_deriv = vec_deriv - self.reg_param * self.item_vectors
         return (vec_deriv, bias_deriv)
     
+    @jit
     def stochastic_deriv(self, user, batch=0.10):
         if user:
             sample=np.random.choice(self.num_items,size=int(batch*self.num_items))
@@ -220,6 +262,7 @@ class LogisticMF():
             
         return (vec_deriv, bias_deriv)
     
+    @jit
     def log_likelihood(self):
         loglik = 0
         A = np.dot(self.user_vectors, self.item_vectors.T)
@@ -241,6 +284,7 @@ class LogisticMF():
         loglik -= 0.5 * self.reg_param * np.sum(np.square(self.item_vectors))
         return loglik
 
+    @jit
     def predict(self):
         P = np.dot(self.user_vectors, self.item_vectors.T)
         P += self.user_biases
@@ -252,17 +296,18 @@ class LogisticMF():
     
 #%% RUNNING THE METHOD
         
-logMF=LogisticMF(clicks,received,num_factors=1,iterations=1500,stochastic=False)
+logMF=LogisticMF(clicks,received,num_factors=1,iterations=30,stochastic=False)
 logMF.train_model()
 
-logMF=LogisticMF(clicks,received,num_factors=1,iterations=60,stochastic=True)
+logMF=LogisticMF(clicks,received,num_factors=1,iterations=30,stochastic=True)
 logMF.train_model()
 
 
 # Predictions
 P=logMF.predict()
 rep=np.mean(trainset["CLICK"])
-results=test_predictions(P,key,trainset,testset,replacement=rep)
+#results=test_predictions(P,key,trainset,testset,replacement=rep)
+results=test_predictions2(P,key,trainset,testset,replacement=rep)
 
 
 # Get Train RMSE
@@ -308,6 +353,10 @@ ax2.plot(list(range(logMF.iterations)),logMF.convergence[:,1],color='red',label=
 ax2.plot(list(range(logMF.iterations)),logMF.convergence[:,2],color='green',label="Item vectors")
 ax2.xlabel("Iterations")
 ax2.legend()
+
+# Plotting predictions
+plt.hist(results["PROBABILITY"],bins=50)
+
 
 
 #%% CROSS-VALIDATION
