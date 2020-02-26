@@ -9,7 +9,9 @@ library(bigmemory)
 library(RcppArmadillo)
 library(Rcpp)
 
-sourceCpp("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/gammaui.cpp")
+#sourceCpp("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/gammaui.cpp")
+sourceCpp("~/Dropbox/Uni/Master_Econometrie/Blok_3/Seminar2020/R/gammaui.cpp")
+
 
 # Functions/tools ------------------------------------------------------------------------
 
@@ -509,34 +511,35 @@ fullAlg <- function(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau
 # for the indices for user and order in our training set.
 
 # Import train and game (test) set from whereever you store them
-df_train <- read_delim("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/Observations_Report.csv",
+# df_train <- read_delim("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/Observations_Report.csv",
+#                        ";", escape_double = FALSE, trim_ws = TRUE)
+# df_test <- read_delim("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/Observations_Game.csv",
+#                       ";", escape_double = FALSE, trim_ws = TRUE)
+
+df_train <- read_delim("~/Google Drive/Seminar 2020/Data/Observations_Report.csv",
                        ";", escape_double = FALSE, trim_ws = TRUE)
-df_test <- read_delim("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/Observations_Game.csv",
+df_test <- read_delim("~/Google Drive/Seminar 2020/Data/Observations_Game.csv",
                       ";", escape_double = FALSE, trim_ws = TRUE)
+
 
 # Merge to create indices
 df_test$CLICK <- NA
 df <- rbind(df_train, df_test)
 
+#Combine Mail and Offer id's
+df[,"MailOffer"] <- df %>%
+  unite("MailOffer", c("MAILID" ,"OFFERID"), sep = "_")%>%
+  select("MailOffer")
+
 # Order on click first such that NA are at bottom (no missings indices in training data)
-df <- df[order(df$CLICK, df$USERID), ]
+df <- df[order(df$CLICK), c("USERID_ind", "OFFERID_ind", "CLICK")]
 df <- df %>% 
   mutate(USERID_ind = group_indices(., factor(USERID, levels = unique(USERID))))
-df <- df[order(df$CLICK, df$OFFERID), ]
 df <- df %>% 
-  mutate(OFFERID_ind = group_indices(., factor(OFFERID, levels = unique(OFFERID))))
+  mutate(OFFERID_ind = group_indices(., factor(MailOffer, levels = unique(MailOffer))))
 
-# Split sets once to find which rows/columns in training have 0 or 1 only and removing
-# duplicates
-# Split
+# Make it neat
 df <- df[order(df$USERID_ind), ]
-df_test <- df[is.na(df$CLICK), c("USERID_ind", "OFFERID_ind", "CLICK")]
-df_train <- df[!(is.na(df$CLICK)), ]
-
-# Remove duplicates by keeping latest observation, also delete old user and offer id
-df_train <- df_train[order(df_train$MAILID, decreasing=TRUE), ]
-df_train <- df_train %>% distinct(USERID_ind, OFFERID_ind, .keep_all = TRUE)
-df_train <- df_train[ ,c("USERID_ind", "OFFERID_ind", "CLICK")]
 
 # Create ratios of CLICK per offer or user (== 1 or == 0 indicates no variation)
 df <- df %>%

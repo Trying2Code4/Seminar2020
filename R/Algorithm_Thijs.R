@@ -59,6 +59,16 @@ derf2 <- function(x){
   return(1/(1+exp(-x)))
 }
 
+#Likelihood function
+loglike <- function(Gamma, C, D, y0=y0, y01 = y01){
+  print("a")
+  a <- sum(log(1+exp(-Gamma[y01])))
+  print("b")
+  b <- sum(Gamma[y0])
+  return(a + b + (priorlambdau/2)*norm(C) + (priorlambdai/2)*norm(D))
+}
+
+
 #ALGORITHM
 #initialization of parameters
 factors <- 2
@@ -68,6 +78,13 @@ priorlambdau <- 1/priorsdu
 priorlambdai <- 1/priorsdi
 nu <- length(unique(df[,1]))
 ni <- length(unique(df[,2]))
+
+#Retrieve indices for y=1 and y=0 from the input data
+y1 <- df[which(df[,3]==1),c("USERID","ORDERID")]
+y0 <- df[which(df[,3]==0),c("USERID","ORDERID")]
+
+#Combine the results in one matrix
+y01 <- rbind(y1,y0)
 
 #Alpha and beta's initialized with a zero, C and D with normal priors
 alpha <- rep(0, nu)
@@ -86,22 +103,37 @@ tic()
 low_rankC <- cbind(C,alpha,rep(1,nu))
 low_rankD <- cbind(D,rep(1,ni),beta)
 
-#Calculate gamma0
-gamma0 <- low_rankC%*%t(low_rankD)
-
-#Retrieve indices for y=1 and y=0 from the input data
-y1 <- df[which(df[,3]==1),c("USERID","ORDERID")]
-y0 <- df[which(df[,3]==0),c("USERID","ORDERID")]
-
 #Calculate respective first derivatives for both y=1 and y=0
-y1 <- cbind(y1, "deriv" = -4*derf1(gamma0[y1]))
-y0 <- cbind(y0, "deriv" = -4*derf2(gamma0[y0]))
+tic()
+y1deriv <- cbind(y1, "deriv" = -4*derf1(get_gamma0(y1[,1], y1[,2], alpha, beta, C, D)))
+y0deriv <- cbind(y0, "deriv" = -4*derf2(get_gamma0(y0[,1], y0[,2], alpha, beta, C, D)))
+y01deriv <- rbind(y1deriv,y0deriv)
+toc()
 
-#Combine the results in one matrix
-y01 <- rbind(y1,y0)
+func1 <- function(){
+  y1deriv <- cbind(y1, "deriv" = -4*derf1(get_gamma0(y1[,1], y1[,2], alpha, beta, C, D)))
+  y0deriv <- cbind(y0, "deriv" = -4*derf2(get_gamma0(y0[,1], y0[,2], alpha, beta, C, D)))
+  y01deriv <- rbind(y1deriv,y0deriv)
+}
+
+func2 <- function() {
+  y03 <- y02
+  y03[1:ny1,3] <- -4*derf1(get_gamma0(y1[,1], y1[,2], alpha, beta, C, D))
+  y03[(ny1+1):(ny1+ny0),3] <- -4*derf2(get_gamma0(y0[,1], y0[,2], alpha, beta, C, D))
+}
+
+ny1 <- nrow(y1)
+ny0 <- nrow(y0)
+y02 <- cbind(y01, NA)
+tic()
+y03 <- y02
+y03[1:ny1,3] <- -4*derf1(get_gamma0(y1[,1], y1[,2], alpha, beta, C, D))
+y03[(ny1+1):(ny1+ny0),3] <- -4*derf2(get_gamma0(y0[,1], y0[,2], alpha, beta, C, D))
+toc()
+
 
 #Turn this matrix to sparse, notice that the dims had to be manually set (for missing items probably
-sparse <- sparseMatrix(i=(y01[,1]), j=(y01[,2]), x = y01[,3], dims = c(nu, ni))
+sparse <- sparseMatrix(i=(y01deriv[,1]), j=(y01deriv[,2]), x = y01deriv[,3], dims = c(nu, ni))
 
 #Calculating the H matrix for alpha update
 H_slr <- splr(sparse,low_rankC,low_rankD)
@@ -122,3 +154,25 @@ H_slr_rowandcolmean <-splr(sparse,low_rankC,low_rankD)
 #Retrieve C and D from the svd.als function
 results <- svd.als(H_slr_rowandcolmean, rank.max = factors, lambda = priorlambdau)
 toc()
+
+
+low_rankCn <- cbind(results$u,newalpha,rep(1,nu))
+low_rankDn <- cbind(results$v,rep(1,ni),newbeta)
+gamma0 <- low_rankCn%*%t(low_rankDn)
+loglike(gamma0, results$u, results$v)
+
+
+tic()
+gamma0 <- low_rankC%*%t(low_rankD)
+test1 <- gamma0[y0]
+toc()
+
+tic()
+test2 <- My_Function(y0[,1], y0[,2], alpha, beta, C, D)
+toc()
+tic()
+test2 <- get_gamma0(alpha, beta, C, D, y0[,1], y0[,2])
+toc()
+
+microbenchmark(My_Function(y0[,1], y0[,2], alpha, beta, C, D), get_gamma0(alpha, beta, C, D, y0[,1], y0[,2]))
+
