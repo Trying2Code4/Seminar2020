@@ -92,7 +92,131 @@ trainTest <- function(df, onlyVar){
   return(output)
 }
 
+#' Create a train/test split, given a training set
+#'
+#' @param df df containing indices, click, and "ratio" columns (see "Preparing data")
+#' @param onlyVar logical variable speciying whether rows/columns without variation (only)
+#' @param cv indicates whether train test split is made for CV
+#' @param ind vector with fold indices in case of CV
+#' @param fold fold that should currently be the test set
+#' zero's or one's are omitted
+#'
+#' @return returns a training set and the test set
+trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
+  # Formatting
+  names(df) <- c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")
+  
+  # Make the test train split (test is 1)
+  # In case of a random draw
+  if(!cv){
+    df$train_test <- rbinom(n = nrow(df), size = 1, prob = 0.2)
+  }
+  
+  # In case of cross validation (recode to zeros and one's for ease)
+  if (cv){
+    df$train_test <- 0
+    df$traintest[ind == fold] <- 1
+  }
+  
+  df$prediction <- NA
+  
+  # Deleting the rows/columns without variation
+  if (onlyVar) {
+    
+    # Split them (temporarily)
+    df_test <- df[as.logical(df$train_test), ]
+    df_train <- df[!(as.logical(df$train_test)), ]
+    
+    # Assign the 0 or 1 to test set obs where a ratio is 0 or 1 (prediction in advance)
+    df_test$prediction[(df_test$ratioU == 0 | df_test$ratioO == 0)] <- 0
+    df_test$prediction[(df_test$ratioU == 1 | df_test$ratioO == 1)] <- 1
+    
+    # Drop the train obs where a ratio is 0 or 1
+    df_train <- df_train[!(df_train$ratioU == 0 | df_train$ratioO == 0 | 
+                             df_train$ratioU == 1 | df_train$ratioO == 1), ]
+    
+    # Merge the two to make indices
+    df <- dplyr::bind_rows(df_train, df_test)
+  }
+  
+  tic("create new indices")
+  # Create new indices. Make sure test is at bottom
+  df <- df[order(df$train_test, df$OFFERID_ind), ]
+  df <- df %>% 
+    mutate(OFFERID_indN = group_indices(., factor(OFFERID_ind, levels = unique(OFFERID_ind))))
+  df <- df[order(df$train_test, df$USERID_ind), ]
+  df <- df %>% 
+    mutate(USERID_indN = group_indices(., factor(USERID_ind, levels = unique(USERID_ind))))
+  toc()
+  
+  tic("split sets")
+  # Split sets
+  df_test <- df[as.logical(df$train_test), ]
+  df_train <- df[!(as.logical(df$train_test)), c("USERID_indN", "OFFERID_indN", "CLICK", 
+                                                 "ratioU", "ratioO")]
+  toc()
+  
+  #4. Return
+  output <- list("df_train" = df_train, "df_test" = df_test)
+  return(output)
+}
 
+#' Create a train/test split, given a training set
+#'
+#' @param df df containing indices, click, and "ratio" columns (see "Preparing data")
+#' @param onlyVar logical variable speciying whether rows/columns without variation (only)
+#' zero's or one's are omitted
+#'
+#' @return returns a training set and the test set
+makeIndices <- function(df, onlyVar, trainData, testData){
+  # Formatting
+  names(df) <- c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")
+  
+  # Make the test train split (test is 1)
+  df$train_test <- rbinom(n = nrow(df), size = 1, prob = 0.2)
+  tic("Make new column")
+  df$prediction <- NA
+  toc()
+  # Deleting the rows/columns without variation
+  if (onlyVar) {
+    
+    # Split them (temporarily)
+    df_test <- df[as.logical(df$train_test), ]
+    df_train <- df[!(as.logical(df$train_test)), ]
+    
+    # Assign the 0 or 1 to test set obs where a ratio is 0 or 1 (prediction in advance)
+    df_test$prediction[(df_test$ratioU == 0 | df_test$ratioO == 0)] <- 0
+    df_test$prediction[(df_test$ratioU == 1 | df_test$ratioO == 1)] <- 1
+    
+    # Drop the train obs where a ratio is 0 or 1
+    df_train <- df_train[!(df_train$ratioU == 0 | df_train$ratioO == 0 | 
+                             df_train$ratioU == 1 | df_train$ratioO == 1), ]
+    
+    # Merge the two to make indices
+    df <- dplyr::bind_rows(df_train, df_test)
+  }
+  
+  tic("create new indices")
+  # Create new indices. Make sure test is at bottom
+  df <- df[order(df$train_test, df$OFFERID_ind), ]
+  df <- df %>% 
+    mutate(OFFERID_indN = group_indices(., factor(OFFERID_ind, levels = unique(OFFERID_ind))))
+  df <- df[order(df$train_test, df$USERID_ind), ]
+  df <- df %>% 
+    mutate(USERID_indN = group_indices(., factor(USERID_ind, levels = unique(USERID_ind))))
+  toc()
+  
+  tic("split sets")
+  # Split sets
+  df_test <- df[as.logical(df$train_test), ]
+  df_train <- df[!(as.logical(df$train_test)), c("USERID_indN", "OFFERID_indN", "CLICK", 
+                                                 "ratioU", "ratioO")]
+  toc()
+  
+  #4. Return
+  output <- list("df_train" = df_train, "df_test" = df_test)
+  return(output)
+}
 #' Gives initial estimates for alpha, beta, C and D
 #'
 #' @param df training df containing ONLY indices and click
@@ -223,8 +347,8 @@ initChoose <- function(df, factors, priorsdu, priorsdi, initType){
 #' @param iter Iterlation limit
 #'
 #' @return returns parameters alpha, beta, C and D
-parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, iter, initType) {
-  tic("Misc")
+parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, iter, 
+                   initType, llh, rmse, df_test=NULL) {
   names(df) <- c("USERID_ind", "OFFERID_ind", "CLICK")
   
   # Initialization
@@ -248,23 +372,31 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
   
   df1 <- cbind(y1, "deriv" = NA)
   df0 <- cbind(y0, "deriv" = NA)
-  toc()
   
-  tic("Initial gamma")
   gamma_y1 <- get_gamma0(y1[,1], y1[,2], alpha, beta, C, D)
   gamma_y0 <- get_gamma0(y0[,1], y0[,2], alpha, beta, C, D)
-  toc()
-  
-  # Keeping track of likelihoods
-  logllh <- rep(NA, (iter+1))
   
   run <- 1
   
-  # Calculate log likelihood
-  tic("Initial likelihood")
-  logllh[run] <- sum(logllh1(gamma_y1)) + sum(logllh0(gamma_y0)) + 
-    priorlambdau/2 * norm(C)^2 + priorlambdai/2 * norm(D)^2
-  toc()
+  if (llh) {
+    # Keeping track of likelihoods
+    logllh <- rep(NA, (iter+1))
+    
+    # Calculate log likelihood
+    logllh[run] <- sum(logllh1(gamma_y1)) + sum(logllh0(gamma_y0)) + 
+      priorlambdau/2 * norm(C)^2 + priorlambdai/2 * norm(D)^2
+  }
+  
+  if (rmse){
+    # Keeping track of rmse
+    rmse <- rep(NA, (iter+1))
+    temp <- getPredict(df_test, alpha, beta, C, D)
+    predictions <- temp$prediction
+    predictions[is.na(predictions)] <- 0
+    actuals <- temp$CLICK
+    
+    rmse[run] <- sqrt(mean((predictions - actuals)^2))
+  }
   
   while (run <= iter) {
     tic(paste("Complete iteration", run, sep = " "))
@@ -276,24 +408,19 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
     # gamma0 <- low_rankC %*% t(low_rankD)
     
     #Calculate respective first derivatives for both y=1 and y=0
-    tic("Derivative")
     df1[,"deriv"] <- -4 * derf1(gamma_y1)
     df0[,"deriv"] <- -4 * derf2(gamma_y0)
-    toc()
     
     # df1 <- cbind(y1, "deriv" = -4 * derf1(gamma0[y1]))
     # df0 <- cbind(y0, "deriv" = -4 * derf2(gamma0[y0]))
     
     #Combine the results in one matrix
-    tic("rbind")
     df01 <- rbind(df1, df0)
-    toc()
     
     #Turn this matrix to sparse, notice that the dims had to be manually set
     # (for missing items probably)
     # sparse <- sparseMatrix(i = df01$USERID_ind, j = df01$OFFERID_ind,
     #                        x = df01$deriv, dims = c(nu, ni))
-    tic("Updating alpha and beta")
     sparse <- sparseMatrix(i = (df01[ ,"USERID_ind"]), j = (df01[ ,"OFFERID_ind"]),
                            x = df01[ ,"deriv"], dims = c(nu, ni))
     
@@ -307,17 +434,14 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
     low_rankC <- cbind(C, (alpha - rowMeans(H_slr)), rep(1, nu))
     H_slr_rowmean <- splr(sparse, low_rankC, low_rankD)
     newbeta <- as.matrix((1/nu) * t(t(rep(1, nu)) %*% H_slr_rowmean))
-    toc()
     
     #Updating the C and D
     #Remove row and column mean from H
-    tic("Updating C and D")
     low_rankD <- cbind(D, rep(1, ni), (beta - colMeans(H_slr_rowmean)))
     H_slr_rowandcolmean <-splr(sparse, low_rankC, low_rankD)
     
     #Retrieve C and D from the svd.als function
     results <- svd.als(H_slr_rowandcolmean, rank.max = factors, lambda = priorlambdau / 2)
-    toc()
     
     # Updates
     alpha <- newalpha
@@ -329,21 +453,30 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
     run <- run + 1
     
     # Updating gamma
-    tic("Calculating new gamma")
     gamma_y1 <- get_gamma0(y1[,1], y1[,2], alpha, beta, C, D)
     gamma_y0 <- get_gamma0(y0[,1], y0[,2], alpha, beta, C, D)
-    toc()
     
-    # Log Likelihood of current iteration
-    tic("Calculating new likelihood")
-    logllh[run] <- sum(logllh1(gamma_y1)) + sum(logllh0(gamma_y0)) + 
-      priorlambdau/2 * norm(C)^2 + priorlambdai/2 * norm(D)^2
-    toc()
+    if (llh){
+      # Log Likelihood of current iteration
+      logllh[run] <- sum(logllh1(gamma_y1)) + sum(logllh0(gamma_y0)) + 
+        priorlambdau/2 * norm(C)^2 + priorlambdai/2 * norm(D)^2
+    }
+    
+    if (rmse){
+      # RMSE of current iteration
+      temp <- getPredict(df_test, alpha, beta, C, D)
+      predictions <- temp$prediction
+      predictions[is.na(predictions)] <- 0
+      actuals <- temp$CLICK
+      
+      rmse[run] <- sqrt(mean((predictions - actuals)^2))
+    }
     
     toc()
   }
   
-  output <- list("alpha" = alpha, "beta" = beta, "C" = C, "D" = D, "logllh" = logllh)
+  output <- list("alpha" = alpha, "beta" = beta, "C" = C, "D" = D, "logllh" = logllh, 
+                 "rmse" = rmse)
   return(output)
 }
 
@@ -404,11 +537,12 @@ getPredict <- function(df, alpha, beta, C, D){
 #'
 #' @examples
 fullAlg <- function(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau, 
-                    priorlambdai, iter, initType, onlyVar){
+                    priorlambdai, iter, initType, onlyVar, llh=FALSE, rmse=FALSE){
   
   # Estimating parameters
   tic("2. Estimating parameters")
-  pars <- parEst(df_train, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, iter, initType)
+  pars <- parEst(df_train, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, iter, 
+                 initType, llh, rmse, df_test)
   toc()
   
   # Getting predictions
@@ -474,14 +608,25 @@ df_sumUser <- df_train %>%
 
 df_sumOffer <- df_train %>%
   group_by(OFFERID_ind) %>%
-  summarise(ratioO = sum(CLICK)/n())
+  summarise(ratioO = sum(CLICK)/n() )
+
+df <- df %>%
+  group_by(USERID_ind) %>%
+  mutate(ratioU = mean(CLICK, na.rm = TRUE))
+
+df <- df %>%
+  group_by(OFFERID_ind) %>%
+  mutate(ratioO = mean(CLICK, na.rm = TRUE))
 
 # Bind the sets to link these ratio variables to the observations
 df <- rbind(df_train, df_test)
 
 # Merge the sets to get these variables
 # This takes long, but we only have to do it once
+<<<<<<< HEAD
 
+=======
+>>>>>>> 9c836a602e8fc5d5ecbcda8d2a351eb7ae47af4d
 df <- merge(x = df, y = df_sumUser, all.x = TRUE)
 df <- merge(x = df, y = df_sumOffer, all.x = TRUE)
 
@@ -540,22 +685,66 @@ priorsdu <- 2.5
 priorsdi <- 2.5
 priorlambdau <- 1/priorsdu
 priorlambdai <- 1/priorsdi
-iter <- 100
+iter <- 1000
 initType <- 4
 onlyVar <- TRUE
+llh <- TRUE
+rmse <- TRUE
 
-set.seed(123)
+
+set.seed(50)
 split <- trainTest(df, onlyVar)
 df_train <- split$df_train[ ,c("USERID_indN", "OFFERID_indN", "CLICK")]
 df_test <- split$df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK", "prediction")]
 rm("split")
 
 output2 <- fullAlg(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau, 
-                  priorlambdai, iter, initType, onlyVar)
+                  priorlambdai, iter, initType, onlyVar, llh, rmse)
 
 # Visualization
-hist(output$prediction$prediction)
-plot(output$parameters$logllh)
+hist(output2$prediction$prediction)
+xdata <- seq(1, iter+1)
+plot(xdata, output2$parameters$logllh, col="blue")
+plot(xdata, output2$parameters$rmse, col="red")
+
+# Cross validation -----------------------------------------------------------------------
+# Import train set
+df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
+
+# Input whichever hyperparameters you want to test
+FACTORS <- c(2, 3)
+PRIORSDU <- c(2, 4)
+PRIORSDI <- c(2, 4)
+INITTYPE <- c(4)
+ONLYVAR <- c(TRUE, FALSE)
+folds <- 10
+
+# Initialize output df
+rows <- length(FACTORS) + length(PRIORSDU) + length(PRIORSDI) + length(INITTYPE) + 
+  length(ONLYVAR)
+columns <- 5 + folds + 1
+
+outputRMSE <- data.frame(matrix(NA, nrow = rows, ncol = columns))
+
+# Creating the folds
+# Randomly shuffle your rows
+df <- df[sample(nrow(df)), ]
+
+# Create fold indices
+foldInd <- cut(seq(1, nrow(df)), breaks = folds, labels = FALSE)
+
+# Looping over your folds
+for (z in 1:folds){
+  testIndexes <- which(foldInd == i, arr.ind=TRUE)
+  testData <- yourdata[testIndexes, ]
+  trainData <- yourdata[-testIndexes, ]
+  
+}
+testIndexes <- which(foldInd == i, arr.ind=TRUE)
+sample(1:folds, nrow(df), replace=T)
+for (z in 1:folds)
+
+
 
 
 # Final predictions ----------------------------------------------------------------------
@@ -600,6 +789,25 @@ iter <- 0
 initType <- 1
 
 
+df_trainOrg <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
+df_testOrg <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_test")
+
+df_train <- df_train[order(df_train$USERID_ind, df_train$OFFERID_ind), ]
+df_trainOrg <- df_train[order(df_train$USERID_ind, df_train$OFFERID_ind), ]
+
+sum(df_train$ratioU - df_trainOrg$ratioU)
+
+sum(is.na(df_train$ratioU))
+sum(is.na(df_trainOrg$ratioU))
+  
+  
+  
+  
+  
+  
+  
+  
+  
 alpha <- df %>%
       group_by(USERID_ind) %>%
       summarize(meanCLICK = mean(CLICK))
