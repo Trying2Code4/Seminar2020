@@ -293,7 +293,7 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
   }
   
   while (run <= iter) {
-   # tic(paste("Complete iteration", run, sep = " "))
+    tic(paste("Complete iteration", run, sep = " "))
     #Define low rank representation of gamma0
     low_rankC <- cbind(C, alpha, rep(1, nu))
     low_rankD <- cbind(D, rep(1,ni), beta)
@@ -370,7 +370,7 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
       
       rmse_it[run] <- sqrt(mean((predictions - actuals)^2))
     }
-   # toc()
+   toc()
     
     if (!is.null(epsilon)) {
       if (abs((logllh_new-logllh_old)/logllh_old) < epsilon) break
@@ -434,11 +434,11 @@ getPredict <- function(df, alpha, beta, C, D){
 #'
 #' @examples
 fullAlg <- function(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau, 
-                    priorlambdai, iter, initType, llh=FALSE, rmse=FALSE){
+                    priorlambdai, iter, initType, llh=FALSE, rmse=FALSE, epsilon=NULL){
   # Estimating parameters
   tic("2. Estimating parameters")
   pars <- parEst(df_train, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, iter, 
-                 initType, llh, rmse, df_test)
+                 initType, llh, rmse, df_test, epsilon)
   toc()
   
   # Getting predictions
@@ -523,7 +523,7 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, e
             # Run the algorithm
             invisible(
             output <- fullAlg(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau, 
-                              priorlambdai, iter, initType)
+                              priorlambdai, iter, initType, epsilon)
             )
             # Fill the array with output
             CVoutput[row, 1] <- factors
@@ -554,6 +554,29 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, e
   return(CVoutput)
 }
 
+baselinePred <- function(df_train, df_test){
+  # initialize column with majority
+  df_test$predUser <- 0
+  df_test$predOffer <- 0
+  df_test$predOverall <- mean(df_train$CLICK)
+  df_test$predMajority <- 0
+  
+  # Fill in predictions where available
+  df_test$predUser <- df_test$ratioU[!is.na(df_test$ratioU)]
+  df_test$predOffer <- df_test$ratioO[!is.na(df_test$ratioO)]
+  
+  rmseUser <- sqrt(mean((df_test$predUser - df_test$CLICK)^2))
+  rmseOffer <- sqrt(mean((df_test$predOffer - df_test$CLICK)^2))
+  rmseOverall <- sqrt(mean((df_test$predOverall - df_test$CLICK)^2))
+  rmseMajority <- sqrt(mean((df_test$predMajority - df_test$CLICK)^2))
+  
+  output <- list("rmseUser" = rmseUser, "rmseOffer" = rmseOffer, 
+                 "rmseOverall" = rmseOverall, "rmseMajority" = rmseMajority)
+  
+  return(output)
+}
+
+  
 
 
 # Preparing data -------------------------------------------------------------------------
@@ -626,13 +649,14 @@ df <- df[ , c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")]
 
 # Setting parameters
 factors <- 2
-priorsdu <- 2.5
-priorsdi <- 2.5
+priorsdu <- 1
+priorsdi <- 1
 priorlambdau <- 1/priorsdu
 priorlambdai <- 1/priorsdi
-iter <- 2
+iter <- 100
 initType <- 4
 onlyVar <- FALSE
+epsilon <- 
 
 tic("1. Train test split")
 split <- trainTest(df, onlyVar)
@@ -643,6 +667,8 @@ toc()
 
 output <- fullAlg(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau, 
                   priorlambdai, iter, initType, llh = TRUE, rmse = TRUE)
+
+baseline <- baselinePred(df_train, df_test)
 
 # Visualization
 hist(output$prediction$prediction)
@@ -657,29 +683,33 @@ df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_t
 df <- df[df$USERID_ind < 10000, c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")]
 
 # Setting parameters
-factors <- 2
-priorsdu <- 2.5
-priorsdi <- 2.5
+factors <- 4
+priorsdu <- 1
+priorsdi <- 1
 priorlambdau <- 1/priorsdu
 priorlambdai <- 1/priorsdi
-iter <- 10
+iter <- 200
 initType <- 4
 onlyVar <- TRUE
 llh <- TRUE
 rmse <- TRUE
-
+epsilon <- 0.001
 
 set.seed(50)
 split <- trainTest(df, onlyVar)
 df_train <- split$df_train[ ,c("USERID_indN", "OFFERID_indN", "CLICK")]
 df_test <- split$df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK", "prediction")]
+
+df_train2 <- split$df_train[ ,c("USERID_indN", "OFFERID_indN", "CLICK")]
+df_test2 <- split$df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK", "ratioU", "ratioO")]
+
 rm("split")
 
-output2 <- fullAlg(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau, 
-                  priorlambdai, iter, initType, llh, rmse)
+output <- fullAlg(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau, 
+                  priorlambdai, iter, initType, llh, rmse, epsilon)
 
-output3 <- fullAlg(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau, 
-                   priorlambdai, iter, initType)
+baseline <- baselinePred(df_train2, df_test2)
+
 
 # Visualization
 hist(output2$prediction$prediction)
