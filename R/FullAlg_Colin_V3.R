@@ -293,7 +293,7 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
   }
   
   while (run <= iter) {
-    tic(paste("Complete iteration", run, sep = " "))
+   # tic(paste("Complete iteration", run, sep = " "))
     #Define low rank representation of gamma0
     low_rankC <- cbind(C, alpha, rep(1, nu))
     low_rankD <- cbind(D, rep(1,ni), beta)
@@ -370,7 +370,7 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
       
       rmse_it[run] <- sqrt(mean((predictions - actuals)^2))
     }
-    toc()
+   # toc()
     
     if (!is.null(epsilon)) {
       if (abs((logllh_new-logllh_old)/logllh_old) < epsilon) break
@@ -378,7 +378,7 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
   }
   
   output <- list("alpha" = alpha, "beta" = beta, "C" = C, "D" = D, "logllh" = logllh, 
-                 "rmse" = rmse_it)
+                 "rmse" = rmse_it, "run" = run)
   return(output)
 }
 
@@ -471,20 +471,20 @@ fullAlg <- function(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau
   return(output)
 }
 
-crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter){
+crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, epsilon){
   
   # Initialize a multidimensional output array
   # Rows are all the possible permutations of the huperparameters * folds
   rows <- (length(ONLYVAR) * length(FACTORS) * length(PRIORS) * length(INITTYPE)) * folds
   
   # Columns for the hyperparameters, plus a name variable, and then all the results you want
-  # these are: rmse, TP (true positive(1)), TN, FP, FN
-  columns <- 4 + 1 + 5
+  # these are: rmse, TP (true positive(1)), TN, FP, FN, number of iterations
+  columns <- 4 + 1 + 6
   
   # Initialize the df (depth is the number of folds)
   CVoutput <- data.frame(matrix(NA, nrow = rows, ncol = columns))
   names(CVoutput) <- c("Factor", "PriorS", "initType", "onlyVar", "Specification",
-                       "RMSE", "TP", "TN", "FP", "FN")
+                       "RMSE", "TP", "TN", "FP", "FN", "iter")
   
   # Now we loop
   # First we make the folds
@@ -542,6 +542,7 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter){
             CVoutput[row, 8] <- output$confusion$TN
             CVoutput[row, 9] <- output$confusion$FP
             CVoutput[row, 10] <- output$confusion$TP
+            CVoutput[row, 11] <- output$parameters$run - 1
             
             row <- row+1
             toc()
@@ -619,7 +620,7 @@ saveRDS(df_test, "~/Google Drive/Seminar 2020/Data/df_test")
 # Use "Preparing data" first to get the df_train object
 #df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
 df <- readRDS("~/Google Drive/Seminar 2020/Data/df_train")
-
+df <- df[ , c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")]
 
 # Setting parameters
 factors <- 2
@@ -651,7 +652,7 @@ plot(output$parameters$logllh)
 
 # Use "Preparing data" first to get the df_train object
 df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
-df <- df[df$USERID_ind < 10000, ]
+df <- df[df$USERID_ind < 10000, c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")]
 
 # Setting parameters
 factors <- 2
@@ -686,18 +687,20 @@ plot(xdata, output2$parameters$rmse_it, col="red")
 
 # Cross validation -----------------------------------------------------------------------
 # Import train set
+# Make sure the names are correct
 df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
-df <- df[df$USERID_ind < 10000, ]
+df <- df[df$USERID_ind < 10000, c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")]
 
 # Input whichever hyperparameters you want to test
-FACTORS <- c(2, 3)
-PRIORS <- c(2, 4)
+FACTORS <- c(2, 4)
+PRIORS <- c(1, 10)
 INITTYPE <- c(4)
-ONLYVAR <- c(TRUE, FALSE)
+ONLYVAR <- c(TRUE)
 folds <- 2
-iter <- 20
+iter <- 2
+epsilon <- 0.01
 
-CVoutput <- crossValidate(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter)
+CVoutput <- crossValidate(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, epsilon)
 
 # Visualizing output
 CVoutput$Specification <- as.factor(CVoutput$Specification)
