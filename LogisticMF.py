@@ -22,7 +22,7 @@ from numba import jit
 #Get a subset of the data from TrainTestSmall
 #from TrainTestSmall import trainset,testset
 from Tools import encoder, test_predictions, train_test, get_test_pred,test_predictions2
-trainset,testset=train_test(1000000)
+trainset,testset=train_test(32173022)
 # 32173022 to use full
 
 # Optional: Filter for users that have at least one click
@@ -146,7 +146,7 @@ class LogisticMF():
             user_bias_deriv_sum = np.zeros((self.num_users, 1)) 
             item_bias_deriv_sum = np.zeros((self.num_items, 1)) 
         
-        self.convergence = np.zeros((self.iterations,3)) 
+        #self.convergence = np.zeros((self.iterations,4)) 
         
         
         for i in range(self.iterations):
@@ -186,10 +186,17 @@ class LogisticMF():
             self.convergence[i,0]=self.log_likelihood()
             self.convergence[i,1]=np.linalg.norm(user_vec_deriv)
             self.convergence[i,2]=np.linalg.norm(item_vec_deriv)
-            print('iteration %i finished in %f seconds' % (i + 1, t2 - t0))
-            print('Log-likelihood: ',self.convergence[i,0])
-            print("User gradient norm: ",self.convergence[i,1])
-            print("Item gradient norm: ",self.convergence[i,2])
+            #print('iteration %i finished in %f seconds' % (i + 1, t2 - t0))
+            #print('Log-likelihood: ',self.convergence[i,0])
+            #print("User gradient norm: ",self.convergence[i,1])
+            #print("Item gradient norm: ",self.convergence[i,2])
+            #P = self.predict()
+            #results=test_predictions2(P,key,trainset,testset,replacement=rep)
+            #RMSE=testRMSE(results)
+            #self.convergence[i,3]=RMSE 
+            #print('RMSE: ',RMSE)
+
+            
 
     @jit
     def deriv(self, user):
@@ -294,8 +301,9 @@ class LogisticMF():
         return P
     
     
-#%% RUNNING THE METHOD
-        
+#%% ANALYSIS
+  
+# Running the method      
 logMF=LogisticMF(clicks,received,num_factors=1,iterations=30,stochastic=False)
 logMF.train_model()
 
@@ -357,26 +365,34 @@ ax2.legend()
 # Plotting predictions
 plt.hist(results["PROBABILITY"],bins=50)
 
+# Plotting test RMSE per iterations
 
+# Make sure trainset, testset, key are all run
+rep=np.mean(trainset["CLICK"])
+logMF=LogisticMF(clicks,received,num_factors=1,iterations=1000,stochastic=True)
+logMF.train_model()
+
+plt.plot(list(range(logMF.iterations)),logMF.convergence[:,3])
 
 #%% CROSS-VALIDATION
 import itertools
-from Tools import CV_test_RMSE
+from Tools import CV_test_RMSE2
 from sklearn.model_selection import KFold
 
-## Preparing parameters combinations
-fs=[1,2]                    # number of latent factors (f)
-lambdas=[1,1.1,1.2,1.3,1.4]     # reg param (lamba)
-deltas=[0.2,0.3,0.5,0.6,1]            # learning rate (delta)
+## Preparing parameter combinations
+fs=[1,2]                        # number of latent factors (f)
+lambdas=[0.5,1,1.2,1.4,1.8]     # reg param (lamba)
+deltas=[0.2,0.6]                # learning rate (delta)
+filtered=[True,False]           # whether to exclude nonclickers from the esimation
 # Calculate cartesian product of parameter values to try
-param_combs=list(itertools.product(fs,lambdas,deltas))                                               
+param_combs=list(itertools.product(filtered,fs,lambdas,deltas))                                               
 # Preparing to store probability matrices
 num_combs=len(param_combs)
-
+half_num_combs=int(num_combs/2)
 
 ## Preparing Cross Validation
 observations = pd.read_csv('Observations_Report.csv', sep=';')
-nObs = 500000
+nObs = 50000
 #Taking a subset of the observations
 observationsSmall = observations.sort_values(by=['USERID'], axis = 0, ascending = False)[4000:(4000+nObs)] #-> random users
 #observationsSmall = observations.sample(frac=1)[1:nObs] #shuffle the observations -> completely random obs
@@ -393,22 +409,33 @@ for train_index, test_index in kf.split(observationsSmall):
     # Get data matrix
    train = observationsSmall.loc[observationsSmall.index[train_index].values]
    test =  observationsSmall.loc[observationsSmall.index[test_index].values]
+   rep = np.mean(train["CLICK"])
    
-   formatted,key=encoder(train) 
-   clicks=sp.csr_matrix((formatted["click"], (formatted["user"], formatted["item"])))
-   received=sp.csr_matrix((np.ones(len(formatted["user"])),(formatted["user"],formatted["item"])))
+   for filtering in filtered:
+       
+       if filtering: #if we apply filtering, we exclude "nonclickers"
+           byUser=trainset.groupby(["USERID"])
+           filteredData=byUser.filter(lambda x: (x["CLICK"].sum()>0) )
+           formatted,key=encoder(filteredData) 
+       else:
+           formatted,key=encoder(train) 
+           
+       clicks=sp.csr_matrix((formatted["click"], (formatted["user"], formatted["item"])))
+       received=sp.csr_matrix((np.ones(len(formatted["user"])),(formatted["user"],formatted["item"])))
 
-   # Train models on training set
-   for comb in param_combs:
-       logMF=LogisticMF(clicks,received,num_factors=comb[0],reg_param=comb[1], lrate=comb[2])
-       logMF.train_model()
-       P=logMF.predict()
-       P_matrices.append(P)
-   
-   # Getting RMSEs on test set
-   RMSEs[:,fold]=CV_test_RMSE(P_matrices, key, train,test,replacement=0.0313503918798985)
-   fold+=1
-   P_matrices=[]
+       # Train models on training set
+       for comb in param_combs[0:half_num_combs]: 
+           # now we only look at the parameters other than "filtered"
+           logMF=LogisticMF(clicks,received,num_factors=comb[1],reg_param=comb[2], lrate=comb[3])
+           logMF.train_model()
+           P=logMF.predict()
+           P_matrices.append(P)
+       
+       # Getting RMSEs on test set
+       f_index=(1-int(filtering))*half_num_combs
+       RMSEs[f_index:f_index+half_num_combs,fold]=CV_test_RMSE2(P_matrices, key, train,test,replacement=rep)
+       fold+=1
+       P_matrices=[]
 
 # Calculate average RMSEs over 5 folds
 meanRMSE=np.mean(RMSEs,axis=1)
