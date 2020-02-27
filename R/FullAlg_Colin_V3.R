@@ -339,8 +339,15 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
     alpha <- newalpha
     beta <- newbeta
     # Using CD' = (UD^1/2)(VD^1/2)'
-    C <- results$u %*% diag(sqrt(results$d))
-    D <- results$v %*% diag(sqrt(results$d))
+    
+    if (factors == 1) {
+      C <- results$u %*% sqrt(results$d)
+      D <- results$v %*% sqrt(results$d)
+    }
+    else {
+      C <- results$u %*% diag(sqrt(results$d))
+      D <- results$v %*% diag(sqrt(results$d))
+    }
     
     run <- run + 1
     
@@ -373,6 +380,7 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
    toc()
     
     if (!is.null(epsilon)) {
+      print((logllh_new-logllh_old)/logllh_old)
       if (abs((logllh_new-logllh_old)/logllh_old) < epsilon) break
     }
   }
