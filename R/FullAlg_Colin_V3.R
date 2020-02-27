@@ -85,11 +85,11 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
   }
   
   # Create new indices. Make sure test is at bottom
-  df <- df[order(df$train_test), ]
-  df <- df %>% 
-    mutate(OFFERID_indN = group_indices(., factor(OFFERID_ind, levels = unique(OFFERID_ind))))
+  df <- df[order(df$train_test, df$USERID_ind, df$OFFERID_ind), ]
   df <- df %>% 
     mutate(USERID_indN = group_indices(., factor(USERID_ind, levels = unique(USERID_ind))))
+  df <- df %>% 
+    mutate(OFFERID_indN = group_indices(., factor(OFFERID_ind, levels = unique(OFFERID_ind))))
   
   # Split sets
   df_test <- df[as.logical(df$train_test), ]
@@ -562,15 +562,15 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, e
 # for the indices for user and order in our training set.
 
 # Import train and game (test) set from whereever you store them
-# df_train <- read_delim("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/Observations_Report.csv",
-#                        ";", escape_double = FALSE, trim_ws = TRUE)
-# df_test <- read_delim("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/Observations_Game.csv",
-#                       ";", escape_double = FALSE, trim_ws = TRUE)
-
-df_train <- read_delim("~/Google Drive/Seminar 2020/Data/Observations_Report.csv",
+df_train <- read_delim("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/Observations_Report.csv",
                        ";", escape_double = FALSE, trim_ws = TRUE)
-df_test <- read_delim("~/Google Drive/Seminar 2020/Data/Observations_Game.csv",
+df_test <- read_delim("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/Observations_Game.csv",
                       ";", escape_double = FALSE, trim_ws = TRUE)
+
+# df_train <- read_delim("~/Google Drive/Seminar 2020/Data/Observations_Report.csv",
+#                        ";", escape_double = FALSE, trim_ws = TRUE)
+# df_test <- read_delim("~/Google Drive/Seminar 2020/Data/Observations_Game.csv",
+#                       ";", escape_double = FALSE, trim_ws = TRUE)
 
 
 # Merge to create indices
@@ -583,34 +583,36 @@ df[,"MailOffer"] <- df %>%
   select("MailOffer")
 
 # Order on click first such that NA are at bottom (no missings indices in training data)
-df <- df[order(df$CLICK), c("USERID_ind", "OFFERID_ind", "CLICK")]
+df <- df[order(df$CLICK), ]
 df <- df %>% 
   mutate(USERID_ind = group_indices(., factor(USERID, levels = unique(USERID))))
 df <- df %>% 
   mutate(OFFERID_ind = group_indices(., factor(MailOffer, levels = unique(MailOffer))))
 
 # Make it neat
-df <- df[order(df$USERID_ind), ]
+df <- df[order(df$USERID_ind), c("USERID_ind", "OFFERID_ind", "CLICK")]
 
 # Create ratios of CLICK per offer or user (== 1 or == 0 indicates no variation)
 df <- df %>%
   group_by(USERID_ind) %>%
-  mutate(ratioU = mean(CLICK, na.rm = TRUE))
+  mutate(ratioU = mean(CLICK, na.rm = TRUE)) %>%
+  ungroup()
 
 df <- df %>%
   group_by(OFFERID_ind) %>%
-  mutate(ratioO = mean(CLICK, na.rm = TRUE))
+  mutate(ratioO = mean(CLICK, na.rm = TRUE)) %>%
+  ungroup()
 
 # Split
 df_test <- df[is.na(df$CLICK), ]
 df_train <- df[!(is.na(df$CLICK)), ]
 
 # Save. Use the df_train.RDS file in CV
-# saveRDS(df_train, "/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
-# saveRDS(df_test, "/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_test")
+saveRDS(df_train, "/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
+saveRDS(df_test, "/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_test")
 
-saveRDS(df_train, "~/Google Drive/Seminar 2020/Data/df_train")
-saveRDS(df_test, "~/Google Drive/Seminar 2020/Data/df_test")
+# saveRDS(df_train, "~/Google Drive/Seminar 2020/Data/df_train")
+# saveRDS(df_test, "~/Google Drive/Seminar 2020/Data/df_test")
 
 
 # Train/test pred. -----------------------------------------------------------------
@@ -640,7 +642,7 @@ rm("split")
 toc()
 
 output <- fullAlg(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau, 
-                  priorlambdai, iter, initType, onlyVar, llh = TRUE, rmse = TRUE)
+                  priorlambdai, iter, initType, llh = TRUE, rmse = TRUE)
 
 # Visualization
 hist(output$prediction$prediction)
@@ -690,6 +692,7 @@ plot(xdata, output2$parameters$rmse_it, col="red")
 # Make sure the names are correct
 df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
 df <- df[df$USERID_ind < 10000, c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")]
+
 
 # Input whichever hyperparameters you want to test
 FACTORS <- c(2, 4)
@@ -799,3 +802,8 @@ test <- getPredict(df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK", "predicti
 test$prediction[is.na(test$prediction)] <- 0
 
 hist(test$prediction)
+
+# Problem with indices ------------------------------------------------------------------
+
+
+
