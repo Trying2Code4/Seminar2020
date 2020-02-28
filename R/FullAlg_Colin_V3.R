@@ -402,7 +402,7 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
 #'
 #' @return dataframe including predictions, NA for unknown user/item
 getPredict <- function(df, alpha, beta, C, D){
-  names(df) <- c("USERID_ind", "OFFERID_ind", "CLICK", "prediction")
+  names(df) <- c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO", "prediction")
   
   # By using the size of C and D, we can infer which obs are missing in training
   maxU <- nrow(C)
@@ -451,7 +451,8 @@ fullAlg <- function(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau
   
   # Getting predictions
   tic("3. Getting predictions")
-  results <- getPredict(df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK", "prediction")], 
+  results <- getPredict(df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK",
+                                    "ratioU", "ratioO", "prediction")], 
                         pars$alpha, pars$beta, pars$C, pars$D)
   toc()
   
@@ -486,13 +487,13 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, e
   rows <- (length(ONLYVAR) * length(FACTORS) * length(PRIORS) * length(INITTYPE)) * folds
   
   # Columns for the hyperparameters, plus a name variable, and then all the results you want
-  # these are: rmse, TP (true positive(1)), TN, FP, FN, number of iterations
-  columns <- 4 + 1 + 6
+  # these are: rmse, TP (true positive(1)), TN, FP, FN, number of iterations, best baseline
+  columns <- 4 + 1 + 7
   
   # Initialize the df (depth is the number of folds)
   CVoutput <- data.frame(matrix(NA, nrow = rows, ncol = columns))
   names(CVoutput) <- c("Factor", "PriorS", "initType", "onlyVar", "Specification",
-                       "RMSE", "TP", "TN", "FP", "FN", "iter")
+                       "RMSE", "TP", "TN", "FP", "FN", "iter", "rmseUser")
   
   # Now we loop
   # First we make the folds
@@ -514,7 +515,7 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, e
       set.seed(123)
       split <- trainTest(df, onlyVar, cv = TRUE, ind = foldInd, fold = z)
       df_train <-split$df_train[ ,c("USERID_indN", "OFFERID_indN", "CLICK")]
-      df_test <- split$df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK", "prediction")]
+      df_test <- split$df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK", "ratioU", "ratioO", "prediction")]
       
       # Loop the other hyperparameters
       for (b in 1:length(FACTORS)){
@@ -551,6 +552,7 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, e
             CVoutput[row, 9] <- output$confusion$FP
             CVoutput[row, 10] <- output$confusion$TP
             CVoutput[row, 11] <- output$parameters$run - 1
+            CVoutput[row, 12] <- baselinePred(df_train, df_test)$rmseUser
             
             row <- row+1
             toc()
@@ -578,7 +580,7 @@ baselinePred <- function(df_train, df_test){
   rmseOverall <- sqrt(mean((df_test$predOverall - df_test$CLICK)^2))
   rmseMajority <- sqrt(mean((df_test$predMajority - df_test$CLICK)^2))
   
-  output <- list("rmseUser" = rmseUser, "rmseOffer" = rmseOffer, 
+  output <- list("df_test" = df_test, "rmseUser" = rmseUser, "rmseOffer" = rmseOffer, 
                  "rmseOverall" = rmseOverall, "rmseMajority" = rmseMajority)
   
   return(output)
@@ -669,7 +671,7 @@ epsilon <-
 tic("1. Train test split")
 split <- trainTest(df, onlyVar)
 df_train <-split$df_train[ ,c("USERID_indN", "OFFERID_indN", "CLICK")]
-df_test <- split$df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK", "prediction")]
+df_test <- split$df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK", "ratioU", "ratioO", "prediction")]
 rm("split")
 toc()
 
@@ -706,10 +708,7 @@ epsilon <- 0.001
 set.seed(50)
 split <- trainTest(df, onlyVar)
 df_train <- split$df_train[ ,c("USERID_indN", "OFFERID_indN", "CLICK")]
-df_test <- split$df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK", "prediction")]
-
-df_train2 <- split$df_train[ ,c("USERID_indN", "OFFERID_indN", "CLICK")]
-df_test2 <- split$df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK", "ratioU", "ratioO")]
+df_test <- split$df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK", "ratioU", "ratioO", "prediction")]
 
 rm("split")
 
