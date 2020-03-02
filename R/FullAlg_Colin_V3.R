@@ -487,8 +487,8 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, e
   rows <- (length(ONLYVAR) * length(FACTORS) * length(PRIORS) * length(INITTYPE)) * folds
   
   # Columns for the hyperparameters, plus a name variable, and then all the results you want
-  # these are: rmse, TP (true positive(1)), TN, FP, FN, number of iterations, best baseline
-  columns <- 4 + 1 + 7
+  # these are: rmse, TP (true positive(1)), TN, FP, FN, number of iterations, best baseline, epsilon
+  columns <- 4 + 1 + 8
   
   # Initialize the df (depth is the number of folds)
   CVoutput <- data.frame(matrix(NA, nrow = rows, ncol = columns))
@@ -539,20 +539,21 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, e
             CVoutput[row, 2] <- priorsdu
             CVoutput[row, 3] <- initType
             CVoutput[row, 4] <- onlyVar
+            CVoutput[row, 5] <- epsilon
             
             # The name
-            CVoutput[row, 5] <- paste("Factor = ", factors, "PriorS = ", priorsdu, 
+            CVoutput[row, 6] <- paste("Factor = ", factors, "PriorS = ", priorsdu, 
                                          "initType = ", initType, "onlyVar" = onlyVar,
                                          sep = "")
             
             # Performance variables
-            CVoutput[row, 6] <- output$RMSE
-            CVoutput[row, 7] <- output$confusion$TP
-            CVoutput[row, 8] <- output$confusion$TN
-            CVoutput[row, 9] <- output$confusion$FP
-            CVoutput[row, 10] <- output$confusion$TP
-            CVoutput[row, 11] <- output$parameters$run - 1
-            CVoutput[row, 12] <- baselinePred(df_train, df_test)$rmseUser
+            CVoutput[row, 7] <- output$RMSE
+            CVoutput[row, 8] <- output$confusion$TP
+            CVoutput[row, 9] <- output$confusion$TN
+            CVoutput[row, 10] <- output$confusion$FP
+            CVoutput[row, 11] <- output$confusion$TP
+            CVoutput[row, 12] <- output$parameters$run - 1
+            CVoutput[row, 13] <- baselinePred(df_train, df_test)$rmseUser
             
             row <- row+1
             toc()
@@ -732,8 +733,8 @@ df <- df[df$USERID_ind < 10000, c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU"
 
 
 # Input whichever hyperparameters you want to test
-FACTORS <- c(2, 4)
-PRIORS <- c(1, 10)
+FACTORS <- c(1, 2, 3)
+PRIORS <- c(2, 10)
 INITTYPE <- c(4)
 ONLYVAR <- c(TRUE)
 folds <- 2
