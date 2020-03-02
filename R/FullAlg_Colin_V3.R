@@ -10,8 +10,9 @@ library(RcppArmadillo)
 library(Rcpp)
 library(ggplot2)
 
-sourceCpp("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/gammaui.cpp")
+# sourceCpp("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/gammaui.cpp")
 #sourceCpp("~/Dropbox/Uni/Master_Econometrie/Blok_3/Seminar2020/R/gammaui.cpp")
+sourceCpp("C:/Users/sanne/Documents/Master QM/Block 3/Seminar Case Studies/Seminar2020/R/gammaui.cpp")
 
 
 # Functions/tools ------------------------------------------------------------------------
@@ -293,7 +294,7 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
   }
   
   while (run <= iter) {
-    tic(paste("Complete iteration", run, sep = " "))
+    # tic(paste("Complete iteration", run, sep = " "))
     #Define low rank representation of gamma0
     low_rankC <- cbind(C, alpha, rep(1, nu))
     low_rankD <- cbind(D, rep(1,ni), beta)
@@ -377,7 +378,7 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
       
       rmse_it[run] <- sqrt(mean((predictions - actuals)^2))
     }
-   toc()
+   # toc()
     
     if (!is.null(epsilon)) {
       print((logllh_new-logllh_old)/logllh_old)
@@ -487,8 +488,8 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, e
   rows <- (length(ONLYVAR) * length(FACTORS) * length(PRIORS) * length(INITTYPE)) * folds
   
   # Columns for the hyperparameters, plus a name variable, and then all the results you want
-  # these are: rmse, TP (true positive(1)), TN, FP, FN, number of iterations, best baseline
-  columns <- 4 + 1 + 7
+  # these are: rmse, TP (true positive(1)), TN, FP, FN, number of iterations, best baseline, epsilon
+  columns <- 4 + 1 + 8
   
   # Initialize the df (depth is the number of folds)
   CVoutput <- data.frame(matrix(NA, nrow = rows, ncol = columns))
@@ -498,6 +499,7 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, e
   # Now we loop
   # First we make the folds
   # Randomly shuffle the data
+  set.seed(123)
   df <- df[sample(nrow(df)), ]
   
   # Then assign 1-5 fold indices
@@ -512,10 +514,9 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, e
       onlyVar <- ONLYVAR[a]
       
       # Make the train test split by using the foldInd and fold as input (see trainTest)
-      set.seed(123)
       split <- trainTest(df, onlyVar, cv = TRUE, ind = foldInd, fold = z)
       df_train <-split$df_train[ ,c("USERID_indN", "OFFERID_indN", "CLICK")]
-      df_test <- split$df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK", "ratioU", "ratioO", "prediction")]
+      df_test <- split$df_test
       
       # Loop the other hyperparameters
       for (b in 1:length(FACTORS)){
@@ -532,27 +533,29 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, e
             # Run the algorithm
             invisible(
             output <- fullAlg(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau, 
-                              priorlambdai, iter, initType, epsilon)
+                              priorlambdai, iter, initType, epsilon = epsilon)
             )
             # Fill the array with output
             CVoutput[row, 1] <- factors
             CVoutput[row, 2] <- priorsdu
             CVoutput[row, 3] <- initType
             CVoutput[row, 4] <- onlyVar
+            CVoutput[row, 5] <- epsilon
             
             # The name
-            CVoutput[row, 5] <- paste("Factor = ", factors, "PriorS = ", priorsdu, 
-                                         "initType = ", initType, "onlyVar" = onlyVar,
+            CVoutput[row, 6] <- paste("Factor = ", factors, ", PriorS = ", priorsdu, 
+                                         ", initType = ", initType, ", onlyVar = ", onlyVar,
                                          sep = "")
             
             # Performance variables
-            CVoutput[row, 6] <- output$RMSE
-            CVoutput[row, 7] <- output$confusion$TP
-            CVoutput[row, 8] <- output$confusion$TN
-            CVoutput[row, 9] <- output$confusion$FP
-            CVoutput[row, 10] <- output$confusion$TP
-            CVoutput[row, 11] <- output$parameters$run - 1
-            CVoutput[row, 12] <- baselinePred(df_train, df_test)$rmseUser
+            CVoutput[row, 7] <- output$RMSE
+            CVoutput[row, 8] <- output$confusion$TP
+            CVoutput[row, 9] <- output$confusion$TN
+            CVoutput[row, 10] <- output$confusion$FP
+            CVoutput[row, 11] <- output$confusion$TP
+            CVoutput[row, 12] <- output$parameters$run - 1
+            CVoutput[row, 13] <- baselinePred(df_train, df_test)$rmseUser
+            CVoutput[row, 14] <- CVoutput[row, 7]-CVoutput[row, 13]
             
             row <- row+1
             toc()
@@ -727,20 +730,23 @@ plot(xdata, output2$parameters$rmse_it, col="red")
 # Cross validation -----------------------------------------------------------------------
 # Import train set
 # Make sure the names are correct
-df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
+# df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
+df <- readRDS("C:/Users/sanne/Documents/Master QM/Block 3/Seminar Case Studies/Seminar R-Code/df_train")
 df <- df[df$USERID_ind < 10000, c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")]
 
 
 # Input whichever hyperparameters you want to test
-FACTORS <- c(2, 4)
-PRIORS <- c(1, 10)
+FACTORS <- c(1, 2, 3)
+PRIORS <- c(0.5, 0.75, 1, 2, 3, 4)
 INITTYPE <- c(4)
-ONLYVAR <- c(TRUE)
-folds <- 2
-iter <- 2
+ONLYVAR <- c(TRUE, FALSE)
+folds <- 5
+iter <- 1000
 epsilon <- 0.01
 
 CVoutput <- crossValidate(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, epsilon)
+
+CVoutput_mean <- CVoutput %>% group_by(epsilon, Specification) %>% summarise_all(mean)
 
 # Visualizing output
 CVoutput$Specification <- as.factor(CVoutput$Specification)
