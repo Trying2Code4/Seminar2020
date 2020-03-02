@@ -494,7 +494,7 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, e
   # Initialize the df (depth is the number of folds)
   CVoutput <- data.frame(matrix(NA, nrow = rows, ncol = columns))
   names(CVoutput) <- c("Factor", "PriorS", "initType", "onlyVar", "epsilon", "Specification",
-                       "RMSE", "TP", "TN", "FP", "FN", "iter", "rmseUser")
+                       "RMSE", "TP", "TN", "FP", "FN", "iter", "rmseUser", "difference RMSE")
   
   # Now we loop
   # First we make the folds
@@ -555,6 +555,7 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, e
             CVoutput[row, 11] <- output$confusion$TP
             CVoutput[row, 12] <- output$parameters$run - 1
             CVoutput[row, 13] <- baselinePred(df_train, df_test)$rmseUser
+            CVoutput[row, 14] <- CVoutput[row, 7]-CVoutput[row, 13]
             
             row <- row+1
             toc()
@@ -744,6 +745,8 @@ iter <- 1000
 epsilon <- 0.01
 
 CVoutput <- crossValidate(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, epsilon)
+
+CVoutput_mean <- CVoutput %>% group_by(epsilon, Specification) %>% summarise_all(mean)
 
 # Visualizing output
 CVoutput$Specification <- as.factor(CVoutput$Specification)
