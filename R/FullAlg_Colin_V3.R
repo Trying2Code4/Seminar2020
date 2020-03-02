@@ -10,8 +10,9 @@ library(RcppArmadillo)
 library(Rcpp)
 library(ggplot2)
 
-sourceCpp("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/gammaui.cpp")
+# sourceCpp("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/gammaui.cpp")
 #sourceCpp("~/Dropbox/Uni/Master_Econometrie/Blok_3/Seminar2020/R/gammaui.cpp")
+sourceCpp("C:/Users/sanne/Documents/Master QM/Block 3/Seminar Case Studies/Seminar2020/R/gammaui.cpp")
 
 
 # Functions/tools ------------------------------------------------------------------------
@@ -492,7 +493,7 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, e
   
   # Initialize the df (depth is the number of folds)
   CVoutput <- data.frame(matrix(NA, nrow = rows, ncol = columns))
-  names(CVoutput) <- c("Factor", "PriorS", "initType", "onlyVar", "Specification",
+  names(CVoutput) <- c("Factor", "PriorS", "initType", "onlyVar", "epsilon", "Specification",
                        "RMSE", "TP", "TN", "FP", "FN", "iter", "rmseUser")
   
   # Now we loop
@@ -515,7 +516,7 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, e
       set.seed(123)
       split <- trainTest(df, onlyVar, cv = TRUE, ind = foldInd, fold = z)
       df_train <-split$df_train[ ,c("USERID_indN", "OFFERID_indN", "CLICK")]
-      df_test <- split$df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK", "ratioU", "ratioO", "prediction")]
+      df_test <- split$df_test
       
       # Loop the other hyperparameters
       for (b in 1:length(FACTORS)){
@@ -532,7 +533,7 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, e
             # Run the algorithm
             invisible(
             output <- fullAlg(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau, 
-                              priorlambdai, iter, initType, epsilon)
+                              priorlambdai, iter, initType, epsilon = epsilon)
             )
             # Fill the array with output
             CVoutput[row, 1] <- factors
@@ -728,18 +729,19 @@ plot(xdata, output2$parameters$rmse_it, col="red")
 # Cross validation -----------------------------------------------------------------------
 # Import train set
 # Make sure the names are correct
-df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
+# df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
+df <- readRDS("C:/Users/sanne/Documents/Master QM/Block 3/Seminar Case Studies/Seminar R-Code/df_train")
 df <- df[df$USERID_ind < 10000, c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")]
 
 
 # Input whichever hyperparameters you want to test
 FACTORS <- c(1, 2, 3)
-PRIORS <- c(2, 10)
+PRIORS <- c(2, 3, 4)
 INITTYPE <- c(4)
-ONLYVAR <- c(TRUE)
-folds <- 2
-iter <- 2
-epsilon <- 0.01
+ONLYVAR <- c(TRUE, FALSE)
+folds <- 5
+iter <- 1000
+epsilon <- 0.001
 
 CVoutput <- crossValidate(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, epsilon)
 
