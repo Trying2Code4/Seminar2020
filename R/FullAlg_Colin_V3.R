@@ -294,7 +294,7 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
   }
   
   while (run <= iter) {
-    tic(paste("Complete iteration", run, sep = " "))
+    # tic(paste("Complete iteration", run, sep = " "))
     #Define low rank representation of gamma0
     low_rankC <- cbind(C, alpha, rep(1, nu))
     low_rankD <- cbind(D, rep(1,ni), beta)
@@ -378,7 +378,7 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
       
       rmse_it[run] <- sqrt(mean((predictions - actuals)^2))
     }
-   toc()
+   # toc()
     
     if (!is.null(epsilon)) {
       print((logllh_new-logllh_old)/logllh_old)
@@ -499,6 +499,7 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, e
   # Now we loop
   # First we make the folds
   # Randomly shuffle the data
+  set.seed(123)
   df <- df[sample(nrow(df)), ]
   
   # Then assign 1-5 fold indices
@@ -513,7 +514,6 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, e
       onlyVar <- ONLYVAR[a]
       
       # Make the train test split by using the foldInd and fold as input (see trainTest)
-      set.seed(123)
       split <- trainTest(df, onlyVar, cv = TRUE, ind = foldInd, fold = z)
       df_train <-split$df_train[ ,c("USERID_indN", "OFFERID_indN", "CLICK")]
       df_test <- split$df_test
@@ -736,7 +736,7 @@ df <- df[df$USERID_ind < 10000, c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU"
 
 # Input whichever hyperparameters you want to test
 FACTORS <- c(1, 2, 3)
-PRIORS <- c(2, 3, 4)
+PRIORS <- c(0.5, 0.75, 1, 2, 3, 4)
 INITTYPE <- c(4)
 ONLYVAR <- c(TRUE, FALSE)
 folds <- 5
