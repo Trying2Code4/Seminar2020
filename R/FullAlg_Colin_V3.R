@@ -543,8 +543,8 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, e
             CVoutput[row, 5] <- epsilon
             
             # The name
-            CVoutput[row, 6] <- paste("Factor = ", factors, "PriorS = ", priorsdu, 
-                                         "initType = ", initType, "onlyVar" = onlyVar,
+            CVoutput[row, 6] <- paste("Factor = ", factors, ", PriorS = ", priorsdu, 
+                                         ", initType = ", initType, ", onlyVar = ", onlyVar,
                                          sep = "")
             
             # Performance variables
@@ -741,7 +741,7 @@ INITTYPE <- c(4)
 ONLYVAR <- c(TRUE, FALSE)
 folds <- 5
 iter <- 1000
-epsilon <- 0.001
+epsilon <- 0.01
 
 CVoutput <- crossValidate(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, epsilon)
 
