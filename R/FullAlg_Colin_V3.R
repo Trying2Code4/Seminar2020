@@ -492,8 +492,8 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, e
   
   # Initialize the df (depth is the number of folds)
   CVoutput <- data.frame(matrix(NA, nrow = rows, ncol = columns))
-  names(CVoutput) <- c("Factor", "PriorS", "initType", "onlyVar", "Specification",
-                       "RMSE", "TP", "TN", "FP", "FN", "iter", "rmseUser")
+  names(CVoutput) <- c("Factor", "PriorS", "initType", "onlyVar", "epsilon", "Specification",
+                       "RMSE", "TP", "TN", "FP", "FN", "iter", "rmseUser", "difference RMSE")
   
   # Now we loop
   # First we make the folds
