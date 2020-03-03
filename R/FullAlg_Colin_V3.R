@@ -642,7 +642,11 @@ epsilon <- 0.01
 
 set.seed(50)
 split <- trainTest(df, onlyVar)
+<<<<<<< HEAD
+df_train <-split$df_train[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
+=======
 df_train <- split$df_train[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
+>>>>>>> e7c71719b7c287e2e9883db723514c5cbd0fe0dd
 df_test <- split$df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU", "ratioO", "prediction")]
 rm("split")
 
@@ -676,8 +680,13 @@ epsilon <- 0.01
 set.seed(50)
 split <- trainTest(df, onlyVar)
 df_train <- split$df_train[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
+<<<<<<< HEAD
+df_test <- split$df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU", "ratioO", "prediction")]
+
+=======
 df_test <- split$df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU", 
                              "ratioO", "prediction")]
+>>>>>>> e7c71719b7c287e2e9883db723514c5cbd0fe0dd
 rm("split")
 
 output <- fullAlg(df_train, df_test, factors, lambda, iter, initType, llh, rmse, epsilon)
@@ -728,4 +737,96 @@ CVoutput$RMSE
 
 # Import test and train set
 df_train <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
+<<<<<<< HEAD
 df_test <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_test")
+
+#Caclulcating parameters
+#Hyperparameters
+factors <- 2
+priorsdu <- 1
+priorsdi <- 1
+priorlambdau <- 1/priorsdu
+priorlambdai <- 1/priorsdi
+
+pars <- getPars(df_train[ ,c("USERID_ind", "OFFERID_ind", "CLICK")], 
+                factors, priorsdu, priorsdi, priorlambdau, priorlambdai)
+
+gameResults <- getPredict(df_test, pars$alpha, pars$beta, pars$C, pars$D)
+
+# SOME TESTING ---------------------------------------------------------------------------
+
+# See whether the indices are made correctly
+df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
+df_train <- trainTest(df)$df_train
+
+max(df_train$USERID_ind_new)
+length(unique(df_train$USERID_ind_new))
+
+max(df_train$OFFERID_ind_new)
+length(unique(df_train$OFFERID_ind_new))
+
+# General parameter estimation algorithm testing
+factors <- 2
+priorsdu <- 2.5
+priorsdi <- 2.5
+priorlambdau <- 1/priorsdu
+priorlambdai <- 1/priorsdi
+iter <- 0
+initType <- 1
+
+
+df_trainOrg <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
+df_testOrg <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_test")
+
+df_train <- df_train[order(df_train$USERID_ind, df_train$OFFERID_ind), ]
+df_trainOrg <- df_train[order(df_train$USERID_ind, df_train$OFFERID_ind), ]
+
+sum(df_train$ratioU - df_trainOrg$ratioU)
+
+sum(is.na(df_train$ratioU))
+sum(is.na(df_trainOrg$ratioU))
+
+
+
+
+
+
+
+
+
+alpha <- df %>%
+  group_by(USERID_ind) %>%
+  summarize(meanCLICK = mean(CLICK))
+
+temp <- df %>%
+  group_by(USERID_ind) %>%
+  summarize(meanCLICK = mean(CLICK)) %>%
+  select(meanCLICK)
+
+
+alpha <- -1 * log(1/meanCLICK - 1)
+
+beta <- rep(0, ni)
+
+
+pars <- parEst(parEst(df_train, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, iter, initType))
+
+C <- output$parameters$C
+D <- output$parameters$D
+alpha <- output$parameters$alpha
+beta <- output$parameters$beta
+
+test <- getPredict(df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "prediction")], 
+                   alpha, beta, C, D)
+
+test$prediction[is.na(test$prediction)] <- 0
+
+hist(test$prediction)
+
+# Problem with indices ------------------------------------------------------------------
+
+
+
+=======
+df_test <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_test")
+>>>>>>> e7c71719b7c287e2e9883db723514c5cbd0fe0dd
