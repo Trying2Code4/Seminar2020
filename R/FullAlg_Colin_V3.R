@@ -484,8 +484,6 @@ crossValidate <- function(df, FACTORS, PRIORLAMBDA, INITTYPE, ONLYVAR, folds, it
             factors <- FACTORS[b]
             priorlambda <- PRIORLAMBDA[c]
             initType <- INITTYPE[d]
-            priorlambdau <- 1/priorsdu
-            priorlambdai <- 1/priorsdi
             
             # Run the algorithm
             invisible(
@@ -662,10 +660,7 @@ df <- df[df$USERID_ind < 10000, c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU"
 
 # Setting parameters
 factors <- 4
-priorsdu <- 1
-priorsdi <- 1
-priorlambdau <- 1/priorsdu
-priorlambdai <- 1/priorsdi
+priorlambda <- 1/priorsdi
 iter <- 200
 initType <- 4
 onlyVar <- TRUE
