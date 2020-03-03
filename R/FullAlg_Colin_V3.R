@@ -1,18 +1,16 @@
-# library(recosystem)
 library(dplyr)
 library(readr)
 library(softImpute)
-library(spam)
+# library(spam)
 library(tidyverse)
 library(tictoc)
-# library(bigmemory)
 library(RcppArmadillo)
 library(Rcpp)
 library(ggplot2)
 
-sourceCpp("/Users/colinhuliselan/Documents/Master/Seminar/Seminar2020_V2/R/gammaui.cpp")
+# sourceCpp("/Users/colinhuliselan/Documents/Master/Seminar/Seminar2020_V2/R/gammaui.cpp")
 #sourceCpp("~/Dropbox/Uni/Master_Econometrie/Blok_3/Seminar2020/R/gammaui.cpp")
-# sourceCpp("C:/Users/sanne/Documents/Master QM/Block 3/Seminar Case Studies/Seminar2020/R/gammaui.cpp")
+sourceCpp("C:/Users/sanne/Documents/Master QM/Block 3/Seminar Case Studies/Seminar2020/R/gammaui.cpp")
 
 
 # FUNCTIONS/TOOLS ------------------------------------------------------------------------
@@ -395,11 +393,11 @@ getPredict <- function(df, alpha, beta, C, D){
 #'
 #' @examples
 fullAlg <- function(df_train, df_test, factors, lambda, iter, initType, llh=FALSE, 
-                    rmse=FALSE, epsilon=NULL){
+                    rmse=FALSE, epsilon=NULL, a_in = NULL, b_in = NULL, C_in = NULL, D_in = NULL){
   # Estimating parameters
   tic("2. Estimating parameters")
   pars <- parEst(df_train, factors, lambda, iter, initType, llh, rmse, df_test, 
-                 epsilon)
+                 epsilon, a_in, b_in, C_in, D_in)
   toc()
   
   # Getting predictions
@@ -442,7 +440,7 @@ crossValidate <- function(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter,
   
   # Columns for the hyperparameters, plus a name variable, and then all the results you want
   # these are: rmse, TP (true positive(1)), TN, FP, FN, number of iterations, best baseline, epsilon
-  columns <- 4 + 1 + 8
+  columns <- 14
   
   # Initialize the df (depth is the number of folds)
   CVoutput <- data.frame(matrix(NA, nrow = rows, ncol = columns))
@@ -544,7 +542,7 @@ baselinePred <- function(df_train, df_test){
   df_test$predUser <- 0
   df_test$predOffer <- 0
   df_test$predOverall <- mean(df_train$CLICK)
-  df_test$predMajority <- mode(df_train$CLICK)
+  df_test$predMajority <- 0
   
   # Fill in predictions where available
   df_test$predUser <- df_test$ratioU[!is.na(df_test$ratioU)]
@@ -702,14 +700,14 @@ df <- df[df$USERID_ind < 10000, c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU"
 
 
 # Input whichever hyperparameters you want to test
-FACTORS <- c(1, 2, 3)
-PRIORS <- c(0.5, 0.75, 1, 2, 3, 4)
-LAMBDA <- 1/PRIORS
-INITTYPE <- c(4)
-ONLYVAR <- c(TRUE, FALSE)
-folds <- 5
-iter <- 1000
+FACTORS <- c(1)
+LAMBDA <- c(1, 2)
+INITTYPE <- c(2)
+ONLYVAR <- c(TRUE)
+folds <- 2
+iter <- 10
 epsilon <- 0.01
+warm <- FALSE
 
 CVoutput <- crossValidate(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter, 
                           epsilon, warm)
