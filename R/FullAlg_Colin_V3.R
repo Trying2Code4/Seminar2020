@@ -128,8 +128,8 @@ initChoose <- function(df, factors, priorlamda, initType, a_in = NULL, b_in = NU
     #Alpha and beta's initialized with a zero, C and D with normal priors
     alpha <- rep(0, nu)
     beta <- rep(0, ni)
-    C <- matrix(rnorm(nu * factors, 0, 1/priorlamda), nu, factors)
-    D <- matrix(rnorm(ni * factors, 0, 1/priorlambda), ni, factors)
+    C <- matrix(rnorm(nu * factors, 0, 1/lambda), nu, factors)
+    D <- matrix(rnorm(ni * factors, 0, 1/lambda), ni, factors)
   
     # Take alpha's that create avg click rate per user
   } else if (initType == 4){
@@ -709,14 +709,14 @@ df <- df[df$USERID_ind < 10000, c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU"
 
 # Input whichever hyperparameters you want to test
 FACTORS <- c(1, 2, 3)
-PRIORLAMBDA <- c(0.5, 0.75, 1, 2, 3, 4)
+LAMBDA <- c(0.5, 0.75, 1, 2, 3, 4)
 INITTYPE <- c(4)
 ONLYVAR <- c(TRUE, FALSE)
 folds <- 5
 iter <- 1000
 epsilon <- 0.01
 
-CVoutput <- crossValidate(df, FACTORS, PRIORLAMBDA, INITTYPE, ONLYVAR, folds, iter, 
+CVoutput <- crossValidate(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter, 
                           epsilon, warm)
 
 CVoutput_mean <- CVoutput %>% group_by(epsilon, Specification) %>% summarise_all(mean)
