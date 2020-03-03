@@ -15,37 +15,41 @@ sourceCpp("/Users/colinhuliselan/Documents/Master/Seminar/Seminar2020_V2/R/gamma
 # sourceCpp("C:/Users/sanne/Documents/Master QM/Block 3/Seminar Case Studies/Seminar2020/R/gammaui.cpp")
 
 
-# Functions/tools ------------------------------------------------------------------------
+# FUNCTIONS/TOOLS ------------------------------------------------------------------------
 
-derf1 <- function(x){
-  return(-1 / (1 + exp(x)))
-}
-
-derf2 <- function(x){
-  return(1 / (1 + exp(-x)))
-}
-
-mu <- function(x){
-  return(1 / (1 + exp(-x)))
-}
-
+# Partial loglikelihood when observed value is 1
 logllh1 <- function(x){
   return(log(1 + exp(-x)))
 }
 
+# Partial loglikelihood when observed value is 0
 logllh0 <- function(x){
   return(x + log(1 + exp(-x)))
 }
 
+# Derivative of logllh1
+derf1 <- function(x){
+  return(-1 / (1 + exp(x)))
+}
+
+# Derivative of logllh0
+derf2 <- function(x){
+  return(1 / (1 + exp(-x)))
+}
+
+# Sigmoid function
+mu <- function(x){
+  return(1 / (1 + exp(-x)))
+}
 
 #' Create a train/test split, given a training set
 #'
 #' @param df df containing indices, click, and "ratio" columns (see "Preparing data")
-#' @param onlyVar logical variable speciying whether rows/columns without variation (only)
+#' @param onlyVar logical variable specifying whether rows/columns without variation (only)
 #' @param cv indicates whether train test split is made for CV
 #' @param ind vector with fold indices in case of CV
 #' @param fold fold that should currently be the test set
-#' zero's or one's are omitted
+#' zeroes or ones are omitted
 #'
 #' @return returns a training set and the test set
 trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
@@ -53,17 +57,17 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
   names(df) <- c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")
   
   # Make the test train split (test is 1)
-  # In case of a random draw
-  if(!cv){
-    df$train_test <- rbinom(n = nrow(df), size = 1, prob = 0.2)
-  }
-  
-  # In case of cross validation (recode to zeros and one's for ease)
   if (cv){
+    # In case of cross validation (recode to zeroes and ones for ease)
     df$train_test <- 0
     df$train_test[ind == fold] <- 1
   }
+  else {
+    # In case of a random draws
+    df$train_test <- rbinom(n = nrow(df), size = 1, prob = 0.2)
+  }
   
+  # Pre-allocate column for predictions
   df$prediction <- NA
   
   # Deleting the rows/columns without variation
@@ -86,7 +90,7 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
   }
   
   # Create new indices. Make sure test is at bottom
-  df <- df[order(df$train_test, df$USERID_ind, df$OFFERID_ind), ]
+  df <- df[order(df$train_test), ]
   df <- df %>% 
     mutate(USERID_ind_new = group_indices(., factor(USERID_ind, levels = unique(USERID_ind))))
   df <- df %>% 
@@ -97,7 +101,7 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
   df_train <- df[!(as.logical(df$train_test)), c("USERID_ind_new", "OFFERID_ind_new", "CLICK", 
                                                  "ratioU", "ratioO")]
   
-  #4. Return
+  # Return
   output <- list("df_train" = df_train, "df_test" = df_test)
   return(output)
 }
@@ -111,10 +115,8 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
 #' @param priorsdi variance of normal distr for D
 #' @param initType method used for initialization (integer value)
 #'
-#' @return
-#' @export
+#' @return initial estimates of alpha, beta, C and D
 #'
-#' @examples
 initChoose <- function(df, factors, priorlamda, initType, a_in = NULL, b_in = NULL,
                        C_in = NULL, D_in = NULL){
   # Formatting
@@ -176,20 +178,17 @@ initChoose <- function(df, factors, priorlamda, initType, a_in = NULL, b_in = NU
 #' @param df Dataframe consisting of userid, orderid and click. Id's should run continuously
 #' from 1 to end.
 #' @param factors "Width" of C and D
-#' @param priorsdu Priors for variance for C?
-#' @param priorsdi Priors for variance of D?
-#' @param priorlambdau Prior for lambda for norm C
-#' @param priorlambdai Prior for lambda for norm D
+#' @param priorlambda lambda
 #' @param iter Iterlation limit
 #' @param epsilon Convergence criteria
 #'
 #' @return returns parameters alpha, beta, C and D
-parEst <- function(df, factors, priorlambda, iter, initType, llh, rmse, df_test=NULL, 
+parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL, 
                    epsilon=NULL, a_in = NULL, b_in = NULL, C_in = NULL, D_in = NULL) {
   names(df) <- c("USERID_ind", "OFFERID_ind", "CLICK")
   
   # Initialization
-  initPars <- initChoose(df, factors, priorlambda, initType, a_inL, b_inL, C_in, 
+  initPars <- initChoose(df, factors, lambda, initType, a_inL, b_inL, C_in, 
                          D_in)
   
   #Center required parameters for identification
@@ -219,7 +218,7 @@ parEst <- function(df, factors, priorlambda, iter, initType, llh, rmse, df_test=
   if (!is.null(epsilon) || llh) {
     logllh <- sum(logllh1(gamma_y1)) + sum(logllh0(gamma_y0))
     logllh_new <- logllh + 
-      priorlambdau/2 * norm(C, type="F")^2 + priorlambdai/2 * norm(D, type="F")^2
+      lambda/2 * norm(C, type="F")^2 + lambda/2 * norm(D, type="F")^2
   }
   
   if (llh) {
@@ -287,7 +286,7 @@ parEst <- function(df, factors, priorlambda, iter, initType, llh, rmse, df_test=
     H_slr_rowandcolmean <-splr(sparse, low_rankC, low_rankD)
     
     #Retrieve C and D from the svd.als function
-    results <- svd.als(H_slr_rowandcolmean, rank.max = factors, lambda = priorlambda / 2)
+    results <- svd.als(H_slr_rowandcolmean, rank.max = factors, lambda = lambda / 2)
     
     # Updates
     alpha <- newalpha
@@ -316,7 +315,7 @@ parEst <- function(df, factors, priorlambda, iter, initType, llh, rmse, df_test=
     if (!is.null(epsilon) || llh) {
       logllh <- sum(logllh1(gamma_y1)) + sum(logllh0(gamma_y0))
       logllh_new <- logllh +
-        priorlambdau / 2 * norm(C, type = "F") ^ 2 + priorlambdai / 2 * norm(D, type = "F") ^ 2
+        lambda / 2 * norm(C, type = "F") ^ 2 + lambda / 2 * norm(D, type = "F") ^ 2
     }
     
     # 
@@ -386,10 +385,7 @@ getPredict <- function(df, alpha, beta, C, D){
 #' @param df_train
 #' @param df_test 
 #' @param factors 
-#' @param priorsdu 
-#' @param priorsdi 
-#' @param priorlambdau 
-#' @param priorlambdai 
+#' @param lambda 
 #' @param iter 
 #' @param initType 
 #' @param onlyVar 
@@ -398,11 +394,11 @@ getPredict <- function(df, alpha, beta, C, D){
 #' @export
 #'
 #' @examples
-fullAlg <- function(df_train, df_test, factors, priorlambda, iter, initType, llh=FALSE, 
+fullAlg <- function(df_train, df_test, factors, lambda, iter, initType, llh=FALSE, 
                     rmse=FALSE, epsilon=NULL){
   # Estimating parameters
   tic("2. Estimating parameters")
-  pars <- parEst(df_train, factors, priorlambda, iter, initType, llh, rmse, df_test, 
+  pars <- parEst(df_train, factors, lambda, iter, initType, llh, rmse, df_test, 
                  epsilon)
   toc()
   
@@ -437,11 +433,11 @@ fullAlg <- function(df_train, df_test, factors, priorlambda, iter, initType, llh
   return(output)
 }
 
-crossValidate <- function(df, FACTORS, PRIORLAMBDA, INITTYPE, ONLYVAR, folds, iter, epsilon){
+crossValidate <- function(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter, epsilon){
   
   # Initialize a multidimensional output array
   # Rows are all the possible permutations of the huperparameters * folds
-  rows <- (length(ONLYVAR) * length(FACTORS) * length(PRIORLAMBDA) * length(INITTYPE)) * folds
+  rows <- (length(ONLYVAR) * length(FACTORS) * length(LAMBDA) * length(INITTYPE)) * folds
   
   # Columns for the hyperparameters, plus a name variable, and then all the results you want
   # these are: rmse, TP (true positive(1)), TN, FP, FN, number of iterations, best baseline, epsilon
@@ -449,7 +445,7 @@ crossValidate <- function(df, FACTORS, PRIORLAMBDA, INITTYPE, ONLYVAR, folds, it
   
   # Initialize the df (depth is the number of folds)
   CVoutput <- data.frame(matrix(NA, nrow = rows, ncol = columns))
-  names(CVoutput) <- c("Factor", "PriorLambda", "initType", "onlyVar", "epsilon", "Specification",
+  names(CVoutput) <- c("Factor", "Lambda", "initType", "onlyVar", "epsilon", "Specification",
                        "RMSE", "TP", "TN", "FP", "FN", "iter", "rmseUser", "difference RMSE")
   
   # Now we loop
@@ -476,29 +472,27 @@ crossValidate <- function(df, FACTORS, PRIORLAMBDA, INITTYPE, ONLYVAR, folds, it
       
       # Loop the other hyperparameters
       for (b in 1:length(FACTORS)){
-        for (c in 1:length(PRIORLAMBDA)){
+        for (c in 1:length(LAMBDA)){
           for (d in 1:length(INITTYPE)){
             tic(paste("Run", row, "out of", rows, "in fold", z, "out of ", folds))
             factors <- FACTORS[b]
-            priorlambda <- PRIORLAMBDA[c]
+            lambda <- LAMBDA[c]
             initType <- INITTYPE[d]
-            priorlambdau <- 1/priorsdu
-            priorlambdai <- 1/priorsdi
             
             # Run the algorithm
             invisible(
-            output <- fullAlg(df_train, df_test, factors, priorlambda, iter, initType, 
+            output <- fullAlg(df_train, df_test, factors, lambda, iter, initType, 
                               epsilon = epsilon)
             )
             # Fill the array with output
             CVoutput[row, 1] <- factors
-            CVoutput[row, 2] <- priorlambda
+            CVoutput[row, 2] <- lambda
             CVoutput[row, 3] <- initType
             CVoutput[row, 4] <- onlyVar
             CVoutput[row, 5] <- epsilon
             
             # The name
-            CVoutput[row, 6] <- paste("Factor = ", factors, ", Lambda = ", priorlambda, 
+            CVoutput[row, 6] <- paste("Factor = ", factors, ", Lambda = ", lambda, 
                                          ", initType = ", initType, ", onlyVar = ", onlyVar,
                                          sep = "")
             
@@ -625,10 +619,7 @@ df <- df[ , c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")]
 
 # Setting parameters
 factors <- 2
-priorsdu <- 1
-priorsdi <- 1
-priorlambdau <- 1/priorsdu
-priorlambdai <- 1/priorsdi
+lambda <- 1
 iter <- 100
 initType <- 4
 onlyVar <- FALSE
@@ -641,8 +632,7 @@ df_test <- split$df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "rati
 rm("split")
 toc()
 
-output <- fullAlg(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau, 
-                  priorlambdai, iter, initType, llh = TRUE, rmse = TRUE)
+output <- fullAlg(df_train, df_test, factors, lambda, iter, initType, llh = TRUE, rmse = TRUE)
 
 baseline <- baselinePred(df_train, df_test)
 
@@ -660,10 +650,7 @@ df <- df[df$USERID_ind < 10000, c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU"
 
 # Setting parameters
 factors <- 4
-priorsdu <- 1
-priorsdi <- 1
-priorlambdau <- 1/priorsdu
-priorlambdai <- 1/priorsdi
+lambda <- 1
 iter <- 200
 initType <- 4
 onlyVar <- TRUE
@@ -677,8 +664,7 @@ df_train <- split$df_train[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
 df_test <- split$df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU", "ratioO", "prediction")]
 rm("split")
 
-output <- fullAlg(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau, 
-                  priorlambdai, iter, initType, llh, rmse, epsilon)
+output <- fullAlg(df_train, df_test, factors, lambda, iter, initType, llh, rmse, epsilon)
 
 baseline <- baselinePred(df_train2, df_test2)
 
@@ -700,13 +686,14 @@ df <- df[df$USERID_ind < 10000, c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU"
 # Input whichever hyperparameters you want to test
 FACTORS <- c(1, 2, 3)
 PRIORS <- c(0.5, 0.75, 1, 2, 3, 4)
+LAMBDA <- 1/PRIORS
 INITTYPE <- c(4)
 ONLYVAR <- c(TRUE, FALSE)
 folds <- 5
 iter <- 1000
 epsilon <- 0.01
 
-CVoutput <- crossValidate(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, epsilon)
+CVoutput <- crossValidate(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter, epsilon)
 
 CVoutput_mean <- CVoutput %>% group_by(epsilon, Specification) %>% summarise_all(mean)
 
@@ -728,13 +715,10 @@ df_test <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR
 #Caclulcating parameters
 #Hyperparameters
 factors <- 2
-priorsdu <- 1
-priorsdi <- 1
-priorlambdau <- 1/priorsdu
-priorlambdai <- 1/priorsdi
+lambda <- 1
 
 pars <- getPars(df_train[ ,c("USERID_ind", "OFFERID_ind", "CLICK")], 
-                factors, priorsdu, priorsdi, priorlambdau, priorlambdai)
+                factors, lambda)
 
 gameResults <- getPredict(df_test, pars$alpha, pars$beta, pars$C, pars$D)
 
