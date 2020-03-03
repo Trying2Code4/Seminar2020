@@ -642,11 +642,7 @@ epsilon <- 0.01
 
 set.seed(50)
 split <- trainTest(df, onlyVar)
-<<<<<<< HEAD
-df_train <-split$df_train[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
-=======
 df_train <- split$df_train[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
->>>>>>> e7c71719b7c287e2e9883db723514c5cbd0fe0dd
 df_test <- split$df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU", "ratioO", "prediction")]
 rm("split")
 
@@ -680,13 +676,7 @@ epsilon <- 0.01
 set.seed(50)
 split <- trainTest(df, onlyVar)
 df_train <- split$df_train[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
-<<<<<<< HEAD
 df_test <- split$df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU", "ratioO", "prediction")]
-
-=======
-df_test <- split$df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU", 
-                             "ratioO", "prediction")]
->>>>>>> e7c71719b7c287e2e9883db723514c5cbd0fe0dd
 rm("split")
 
 output <- fullAlg(df_train, df_test, factors, lambda, iter, initType, llh, rmse, epsilon)
@@ -825,8 +815,4 @@ hist(test$prediction)
 
 # Problem with indices ------------------------------------------------------------------
 
-
-
-=======
 df_test <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_test")
->>>>>>> e7c71719b7c287e2e9883db723514c5cbd0fe0dd
