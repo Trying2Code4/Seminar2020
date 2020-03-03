@@ -10,7 +10,7 @@ library(ggplot2)
 # sourceCpp("/Users/colinhuliselan/Documents/Master/Seminar/Seminar2020_V2/R/gammaui.cpp")
 #sourceCpp("~/Dropbox/Uni/Master_Econometrie/Blok_3/Seminar2020/R/gammaui.cpp")
 sourceCpp("C:/Users/sanne/Documents/Master QM/Block 3/Seminar Case Studies/Seminar2020/R/gammaui.cpp")
-
+source("C:/Users/sanne/Documents/Master QM/Block 3/Seminar Case Studies/Seminar2020/R/MajorizationFunctions.R")
 
 # Preparing data -------------------------------------------------------------------------
 # This is how you should import the data.
