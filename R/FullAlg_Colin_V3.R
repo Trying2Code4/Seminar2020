@@ -437,7 +437,8 @@ fullAlg <- function(df_train, df_test, factors, priorlambda, iter, initType, llh
   return(output)
 }
 
-crossValidate <- function(df, FACTORS, PRIORLAMBDA, INITTYPE, ONLYVAR, folds, iter, epsilon){
+crossValidate <- function(df, FACTORS, PRIORLAMBDA, INITTYPE, ONLYVAR, folds, iter, 
+                          epsilon, warm){
   
   # Initialize a multidimensional output array
   # Rows are all the possible permutations of the huperparameters * folds
@@ -449,7 +450,7 @@ crossValidate <- function(df, FACTORS, PRIORLAMBDA, INITTYPE, ONLYVAR, folds, it
   
   # Initialize the df (depth is the number of folds)
   CVoutput <- data.frame(matrix(NA, nrow = rows, ncol = columns))
-  names(CVoutput) <- c("Factor", "PriorLambda", "initType", "onlyVar", "epsilon", "Specification",
+  names(CVoutput) <- c("Factor", "Lambda", "initType", "onlyVar", "epsilon", "Specification",
                        "RMSE", "TP", "TN", "FP", "FN", "iter", "rmseUser", "difference RMSE")
   
   # Now we loop
@@ -475,7 +476,13 @@ crossValidate <- function(df, FACTORS, PRIORLAMBDA, INITTYPE, ONLYVAR, folds, it
       df_test <- split$df_test
       
       # Loop the other hyperparameters
+      
       for (b in 1:length(FACTORS)){
+        # Initialize the warm start objects (can only be used within a certain factor size)
+        a_in <- NULL
+        b_in <- NULL
+        C_in <- NULL
+        D_in <- NULL
         for (c in 1:length(PRIORLAMBDA)){
           for (d in 1:length(INITTYPE)){
             tic(paste("Run", row, "out of", rows, "in fold", z, "out of ", folds))
@@ -486,7 +493,7 @@ crossValidate <- function(df, FACTORS, PRIORLAMBDA, INITTYPE, ONLYVAR, folds, it
             # Run the algorithm
             invisible(
             output <- fullAlg(df_train, df_test, factors, priorlambda, iter, initType, 
-                              epsilon = epsilon)
+                              epsilon = epsilon, a_in=a_in, b_in=b_in, C_in=C_in, D_in=D_in)
             )
             # Fill the array with output
             CVoutput[row, 1] <- factors
@@ -511,6 +518,15 @@ crossValidate <- function(df, FACTORS, PRIORLAMBDA, INITTYPE, ONLYVAR, folds, it
             CVoutput[row, 14] <- CVoutput[row, 7]-CVoutput[row, 13]
             
             row <- row+1
+            
+            # In case of warm starts, keep track of the last parameters
+            if (warm){
+              a_in <- output$parameters$alpha
+              b_in <- output$parameters$beta
+              C_in <- output$parameters$C
+              D_in <- output$parameters$D
+            }
+            
             toc()
             
             
@@ -667,7 +683,8 @@ epsilon <- 0.01
 set.seed(50)
 split <- trainTest(df, onlyVar)
 df_train <- split$df_train[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
-df_test <- split$df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU", "ratioO", "prediction")]
+df_test <- split$df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU", 
+                             "ratioO", "prediction")]
 rm("split")
 
 output <- fullAlg(df_train, df_test, factors, priorlambda, iter, initType, llh, rmse, 
@@ -679,8 +696,8 @@ baseline <- baselinePred(df_train2, df_test2)
 # Visualization
 hist(output2$prediction$prediction)
 xdata <- seq(1, iter+1)
-plot(xdata, output2$parameters$logllh, col="blue")
-plot(xdata, output2$parameters$rmse_it, col="red")
+plot(xdata, output$parameters$logllh, col="blue")
+plot(xdata, output$parameters$rmse_it, col="red")
 
 # Cross validation -----------------------------------------------------------------------
 # Import train set
@@ -699,7 +716,8 @@ folds <- 5
 iter <- 1000
 epsilon <- 0.01
 
-CVoutput <- crossValidate(df, FACTORS, PRIORLAMBDA, INITTYPE, ONLYVAR, folds, iter, epsilon)
+CVoutput <- crossValidate(df, FACTORS, PRIORLAMBDA, INITTYPE, ONLYVAR, folds, iter, 
+                          epsilon, warm)
 
 CVoutput_mean <- CVoutput %>% group_by(epsilon, Specification) %>% summarise_all(mean)
 
