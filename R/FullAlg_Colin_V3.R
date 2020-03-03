@@ -117,7 +117,7 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
 #'
 #' @return initial estimates of alpha, beta, C and D
 #'
-initChoose <- function(df, factors, priorlamda, initType, a_in = NULL, b_in = NULL,
+initChoose <- function(df, factors, lambda, initType, a_in = NULL, b_in = NULL,
                        C_in = NULL, D_in = NULL){
   # Formatting
   names(df) <- c("USERID_ind", "OFFERID_ind", "CLICK")
@@ -130,11 +130,11 @@ initChoose <- function(df, factors, priorlamda, initType, a_in = NULL, b_in = NU
     #Alpha and beta's initialized with a zero, C and D with normal priors
     alpha <- rep(0, nu)
     beta <- rep(0, ni)
-    C <- matrix(rnorm(nu * factors, 0, 1/priorlamda), nu, factors)
-    D <- matrix(rnorm(ni * factors, 0, 1/priorlambda), ni, factors)
+    C <- matrix(rnorm(nu * factors, 0, 1/lambda), nu, factors)
+    D <- matrix(rnorm(ni * factors, 0, 1/lambda), ni, factors)
   
     # Take alpha's that create avg click rate per user
-  } else if (initType == 4){
+  } else if (initType == 2){
     
     # Make user click averages
     temp <- df %>%
@@ -151,8 +151,8 @@ initChoose <- function(df, factors, priorlamda, initType, a_in = NULL, b_in = NU
     
     # Simple zero means for the other parameters
     beta <- rep(0, ni)
-    C <- matrix(rnorm(nu * factors, 0, 1/priorlamda), nu, factors)
-    D <- matrix(rnorm(ni * factors, 0, 1/priorlamda), ni, factors)
+    C <- matrix(rnorm(nu * factors, 0, 1/lambda), nu, factors)
+    D <- matrix(rnorm(ni * factors, 0, 1/lambda), ni, factors)
   }
   
   # If a specific input for alpha, beta C or D is given then overwrite
@@ -178,7 +178,7 @@ initChoose <- function(df, factors, priorlamda, initType, a_in = NULL, b_in = NU
 #' @param df Dataframe consisting of userid, orderid and click. Id's should run continuously
 #' from 1 to end.
 #' @param factors "Width" of C and D
-#' @param priorlambda lambda
+#' @param lambda lambda
 #' @param iter Iterlation limit
 #' @param epsilon Convergence criteria
 #'
@@ -188,7 +188,7 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
   names(df) <- c("USERID_ind", "OFFERID_ind", "CLICK")
   
   # Initialization
-  initPars <- initChoose(df, factors, lambda, initType, a_inL, b_inL, C_in, 
+  initPars <- initChoose(df, factors, lambda, initType, a_in, b_in, C_in, 
                          D_in)
   
   #Center required parameters for identification
@@ -415,9 +415,9 @@ fullAlg <- function(df_train, df_test, factors, lambda, iter, initType, llh=FALS
   RMSE <- sqrt(mean((results$prediction - results$CLICK)^2))
   
   # Calculate confusion matrix
-  tresh <- 0.02192184 # average click rate
+  threshold <- 0.02192184 # average click rate
   results$predictionBin <- rep(0, length(results$prediction))
-  results$predictionBin[results$prediction > tresh] <- 1
+  results$predictionBin[results$prediction > threshold] <- 1
   
   # True positives:
   TP <- sum(results$predictionBin == 1 & results$CLICK == 1)
@@ -433,8 +433,9 @@ fullAlg <- function(df_train, df_test, factors, lambda, iter, initType, llh=FALS
   return(output)
 }
 
-crossValidate <- function(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter, epsilon){
-  
+crossValidate <- function(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter, 
+                          epsilon, warm){
+
   # Initialize a multidimensional output array
   # Rows are all the possible permutations of the huperparameters * folds
   rows <- (length(ONLYVAR) * length(FACTORS) * length(LAMBDA) * length(INITTYPE)) * folds
@@ -445,8 +446,8 @@ crossValidate <- function(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter, e
   
   # Initialize the df (depth is the number of folds)
   CVoutput <- data.frame(matrix(NA, nrow = rows, ncol = columns))
-  names(CVoutput) <- c("Factor", "Lambda", "initType", "onlyVar", "epsilon", "Specification",
-                       "RMSE", "TP", "TN", "FP", "FN", "iter", "rmseUser", "difference RMSE")
+  names(CVoutput) <- c("Factor", "Lambda", "InitType", "OnlyVar", "Epsilon", "Specification",
+                       "RMSE", "TP", "TN", "FP", "FN", "Iter", "rmseUser", "DifferenceRMSE")
   
   # Now we loop
   # First we make the folds
@@ -471,7 +472,13 @@ crossValidate <- function(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter, e
       df_test <- split$df_test
       
       # Loop the other hyperparameters
+      
       for (b in 1:length(FACTORS)){
+        # Initialize the warm start objects (can only be used within a certain factor size)
+        a_in <- NULL
+        b_in <- NULL
+        C_in <- NULL
+        D_in <- NULL
         for (c in 1:length(LAMBDA)){
           for (d in 1:length(INITTYPE)){
             tic(paste("Run", row, "out of", rows, "in fold", z, "out of ", folds))
@@ -480,33 +487,41 @@ crossValidate <- function(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter, e
             initType <- INITTYPE[d]
             
             # Run the algorithm
-            invisible(
             output <- fullAlg(df_train, df_test, factors, lambda, iter, initType, 
-                              epsilon = epsilon)
-            )
+                              epsilon = epsilon, a_in=a_in, b_in=b_in, C_in=C_in, D_in=D_in)
+            
             # Fill the array with output
-            CVoutput[row, 1] <- factors
-            CVoutput[row, 2] <- lambda
-            CVoutput[row, 3] <- initType
-            CVoutput[row, 4] <- onlyVar
-            CVoutput[row, 5] <- epsilon
+            CVoutput$Factor[row] <- factors
+            CVoutput$Lambda[row] <- lambda
+            CVoutput$InitType[row] <- initType
+            CVoutput$OnlyVar[row] <- onlyVar
+            CVoutput$Epsilon[row] <- epsilon
             
             # The name
-            CVoutput[row, 6] <- paste("Factor = ", factors, ", Lambda = ", lambda, 
+            CVoutput$Specification[row] <- paste("Factor = ", factors, ", Lambda = ", lambda, 
                                          ", initType = ", initType, ", onlyVar = ", onlyVar,
-                                         sep = "")
+                                        ", warm = ", warm, sep = "")
             
             # Performance variables
-            CVoutput[row, 7] <- output$RMSE
-            CVoutput[row, 8] <- output$confusion$TP
-            CVoutput[row, 9] <- output$confusion$TN
-            CVoutput[row, 10] <- output$confusion$FP
-            CVoutput[row, 11] <- output$confusion$TP
-            CVoutput[row, 12] <- output$parameters$run - 1
-            CVoutput[row, 13] <- baselinePred(df_train, df_test)$rmseUser
-            CVoutput[row, 14] <- CVoutput[row, 7]-CVoutput[row, 13]
+            CVoutput$RMSE[row] <- output$RMSE
+            CVoutput$TP[row] <- output$confusion$TP
+            CVoutput$TN[row] <- output$confusion$TN
+            CVoutput$FP[row] <- output$confusion$FP
+            CVoutput$FN[row] <- output$confusion$FN
+            CVoutput$Iter[row] <- output$parameters$run - 1
+            CVoutput$rmseUser[row] <- baselinePred(df_train, df_test)$rmseUser
+            CVoutput$DifferenceRMSE[row] <- CVoutput$RMSE[row]-CVoutput$rmseUser[row]
             
             row <- row+1
+            
+            # In case of warm starts, keep track of the last parameters
+            if (warm){
+              a_in <- output$parameters$alpha
+              b_in <- output$parameters$beta
+              C_in <- output$parameters$C
+              D_in <- output$parameters$D
+            }
+            
             toc()
             
             
@@ -518,7 +533,7 @@ crossValidate <- function(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter, e
   
   # Create a mean table
   CVmean <- CVoutput %>% 
-    group_by(epsilon, Specification) %>%
+    group_by(Epsilon, Specification) %>%
     summarise_all(mean)
   
   return(list("CVoutput" = CVoutput, "CVmean" = CVmean))
@@ -614,25 +629,27 @@ saveRDS(df_test, "/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/d
 
 # Use "Preparing data" first to get the df_train object
 #df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
-df <- readRDS("~/Google Drive/Seminar 2020/Data/df_train")
-df <- df[ , c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")]
+df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
+df <- df[ ,c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")]
 
 # Setting parameters
 factors <- 2
 lambda <- 1
 iter <- 100
 initType <- 4
-onlyVar <- FALSE
-epsilon <- 0.001
+onlyVar <- TRUE
+llh <- TRUE
+rmse <- TRUE
+epsilon <- 0.01
 
-tic("1. Train test split")
+set.seed(50)
 split <- trainTest(df, onlyVar)
-df_train <-split$df_train[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
+df_train <- split$df_train[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
 df_test <- split$df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU", "ratioO", "prediction")]
 rm("split")
-toc()
 
-output <- fullAlg(df_train, df_test, factors, lambda, iter, initType, llh = TRUE, rmse = TRUE)
+output <- fullAlg(df_train, df_test, factors, lambda, iter, initType, llh, rmse, 
+                  epsilon)
 
 baseline <- baselinePred(df_train, df_test)
 
@@ -661,7 +678,8 @@ epsilon <- 0.01
 set.seed(50)
 split <- trainTest(df, onlyVar)
 df_train <- split$df_train[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
-df_test <- split$df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU", "ratioO", "prediction")]
+df_test <- split$df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU", 
+                             "ratioO", "prediction")]
 rm("split")
 
 output <- fullAlg(df_train, df_test, factors, lambda, iter, initType, llh, rmse, epsilon)
@@ -672,8 +690,8 @@ baseline <- baselinePred(df_train2, df_test2)
 # Visualization
 hist(output2$prediction$prediction)
 xdata <- seq(1, iter+1)
-plot(xdata, output2$parameters$logllh, col="blue")
-plot(xdata, output2$parameters$rmse_it, col="red")
+plot(xdata, output$parameters$logllh, col="blue")
+plot(xdata, output$parameters$rmse_it, col="red")
 
 # Cross validation -----------------------------------------------------------------------
 # Import train set
@@ -693,7 +711,8 @@ folds <- 5
 iter <- 1000
 epsilon <- 0.01
 
-CVoutput <- crossValidate(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter, epsilon)
+CVoutput <- crossValidate(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter, 
+                          epsilon, warm)
 
 CVoutput_mean <- CVoutput %>% group_by(epsilon, Specification) %>% summarise_all(mean)
 
@@ -705,89 +724,10 @@ p <- ggplot(CVoutput, aes(x=Specification, y=RMSE)) +
 p
   
 CVoutput$RMSE
+
 # Final predictions ----------------------------------------------------------------------
 # If you want predictions for the final set
 
 # Import test and train set
 df_train <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
 df_test <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_test")
-
-#Caclulcating parameters
-#Hyperparameters
-factors <- 2
-lambda <- 1
-
-pars <- getPars(df_train[ ,c("USERID_ind", "OFFERID_ind", "CLICK")], 
-                factors, lambda)
-
-gameResults <- getPredict(df_test, pars$alpha, pars$beta, pars$C, pars$D)
-
-# SOME TESTING ---------------------------------------------------------------------------
-
-# See whether the indices are made correctly
-df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
-df_train <- trainTest(df)$df_train
-
-max(df_train$USERID_ind_new)
-length(unique(df_train$USERID_ind_new))
-
-max(df_train$OFFERID_ind_new)
-length(unique(df_train$OFFERID_ind_new))
-
-# General parameter estimation algorithm testing
-factors <- 2
-priorsdu <- 2.5
-priorsdi <- 2.5
-priorlambdau <- 1/priorsdu
-priorlambdai <- 1/priorsdi
-iter <- 0
-initType <- 1
-
-
-df_trainOrg <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
-df_testOrg <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_test")
-
-df_train <- df_train[order(df_train$USERID_ind, df_train$OFFERID_ind), ]
-df_trainOrg <- df_train[order(df_train$USERID_ind, df_train$OFFERID_ind), ]
-
-sum(df_train$ratioU - df_trainOrg$ratioU)
-
-sum(is.na(df_train$ratioU))
-sum(is.na(df_trainOrg$ratioU))
-
-
-
-
-
-
-
-
-
-alpha <- df %>%
-  group_by(USERID_ind) %>%
-  summarize(meanCLICK = mean(CLICK))
-
-temp <- df %>%
-  group_by(USERID_ind) %>%
-  summarize(meanCLICK = mean(CLICK)) %>%
-  select(meanCLICK)
-
-
-alpha <- -1 * log(1/meanCLICK - 1)
-
-beta <- rep(0, ni)
-
-
-pars <- parEst(parEst(df_train, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, iter, initType))
-
-C <- output$parameters$C
-D <- output$parameters$D
-alpha <- output$parameters$alpha
-beta <- output$parameters$beta
-
-test <- getPredict(df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "prediction")], 
-                   alpha, beta, C, D)
-
-test$prediction[is.na(test$prediction)] <- 0
-
-hist(test$prediction)
