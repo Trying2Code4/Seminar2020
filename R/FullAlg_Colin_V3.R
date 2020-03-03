@@ -88,13 +88,13 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
   # Create new indices. Make sure test is at bottom
   df <- df[order(df$train_test, df$USERID_ind, df$OFFERID_ind), ]
   df <- df %>% 
-    mutate(USERID_indN = group_indices(., factor(USERID_ind, levels = unique(USERID_ind))))
+    mutate(USERID_ind_new = group_indices(., factor(USERID_ind, levels = unique(USERID_ind))))
   df <- df %>% 
-    mutate(OFFERID_indN = group_indices(., factor(OFFERID_ind, levels = unique(OFFERID_ind))))
+    mutate(OFFERID_ind_new = group_indices(., factor(OFFERID_ind, levels = unique(OFFERID_ind))))
   
   # Split sets
   df_test <- df[as.logical(df$train_test), ]
-  df_train <- df[!(as.logical(df$train_test)), c("USERID_indN", "OFFERID_indN", "CLICK", 
+  df_train <- df[!(as.logical(df$train_test)), c("USERID_ind_new", "OFFERID_ind_new", "CLICK", 
                                                  "ratioU", "ratioO")]
   
   #4. Return
@@ -452,7 +452,7 @@ fullAlg <- function(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau
   
   # Getting predictions
   tic("3. Getting predictions")
-  results <- getPredict(df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK",
+  results <- getPredict(df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK",
                                     "ratioU", "ratioO", "prediction")], 
                         pars$alpha, pars$beta, pars$C, pars$D)
   toc()
@@ -515,7 +515,7 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, e
       
       # Make the train test split by using the foldInd and fold as input (see trainTest)
       split <- trainTest(df, onlyVar, cv = TRUE, ind = foldInd, fold = z)
-      df_train <-split$df_train[ ,c("USERID_indN", "OFFERID_indN", "CLICK")]
+      df_train <-split$df_train[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
       df_test <- split$df_test
       
       # Loop the other hyperparameters
@@ -673,8 +673,8 @@ epsilon <-
 
 tic("1. Train test split")
 split <- trainTest(df, onlyVar)
-df_train <-split$df_train[ ,c("USERID_indN", "OFFERID_indN", "CLICK")]
-df_test <- split$df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK", "ratioU", "ratioO", "prediction")]
+df_train <-split$df_train[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
+df_test <- split$df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU", "ratioO", "prediction")]
 rm("split")
 toc()
 
@@ -710,8 +710,8 @@ epsilon <- 0.001
 
 set.seed(50)
 split <- trainTest(df, onlyVar)
-df_train <- split$df_train[ ,c("USERID_indN", "OFFERID_indN", "CLICK")]
-df_test <- split$df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK", "ratioU", "ratioO", "prediction")]
+df_train <- split$df_train[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
+df_test <- split$df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU", "ratioO", "prediction")]
 
 rm("split")
 
@@ -782,11 +782,11 @@ gameResults <- getPredict(df_test, pars$alpha, pars$beta, pars$C, pars$D)
 df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
 df_train <- trainTest(df)$df_train
 
-max(df_train$USERID_indN)
-length(unique(df_train$USERID_indN))
+max(df_train$USERID_ind_new)
+length(unique(df_train$USERID_ind_new))
 
-max(df_train$OFFERID_indN)
-length(unique(df_train$OFFERID_indN))
+max(df_train$OFFERID_ind_new)
+length(unique(df_train$OFFERID_ind_new))
 
 # General parameter estimation algorithm testing
 factors <- 2
@@ -839,7 +839,7 @@ D <- output$parameters$D
 alpha <- output$parameters$alpha
 beta <- output$parameters$beta
 
-test <- getPredict(df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK", "prediction")], 
+test <- getPredict(df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "prediction")], 
                    alpha, beta, C, D)
 
 test$prediction[is.na(test$prediction)] <- 0
