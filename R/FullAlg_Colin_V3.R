@@ -1,11 +1,11 @@
-library(recosystem)
+# library(recosystem)
 library(dplyr)
 library(readr)
 library(softImpute)
 library(spam)
 library(tidyverse)
 library(tictoc)
-library(bigmemory)
+# library(bigmemory)
 library(RcppArmadillo)
 library(Rcpp)
 library(ggplot2)
@@ -220,7 +220,6 @@ initChoose <- function(df, factors, priorsdu, priorsdi, initType){
   return(output)
 }
 
-
 #' Main algorithm for attaining alpha, beta, C and D
 #'
 #' @param df Dataframe consisting of userid, orderid and click. Id's should run continuously
@@ -266,21 +265,22 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
   run <- 1
   
   if (!is.null(epsilon) || llh) {
-    logllh_old <- sum(logllh1(gamma_y1)) + sum(logllh0(gamma_y0)) + 
+    logllh <- sum(logllh1(gamma_y1)) + sum(logllh0(gamma_y0))
+    logllh_new <- logllh + 
       priorlambdau/2 * norm(C, type="F")^2 + priorlambdai/2 * norm(D, type="F")^2
   }
   
   if (llh) {
     # Keeping track of likelihoods
-    logllh <- rep(NA, (iter+1))
+    logllh_all <- rep(NA, (iter+1))
     
     # Calculate log likelihood
-    logllh[run] <- logllh_old
-  } else{
-    logllh <- NA
+    logllh_all[run] <- logllh
+  } else {
+    logllh_all <- NA
   }
   
-  if (rmse){
+  if (rmse) {
     # Keeping track of rmse
     rmse_it <- rep(NA, (iter+1))
     temp <- getPredict(df_test, alpha, beta, C, D)
@@ -289,7 +289,7 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
     actuals <- temp$CLICK
     
     rmse[run] <- sqrt(mean((predictions - actuals)^2))
-  } else{
+  } else {
     rmse_it <- NA
   }
   
@@ -356,17 +356,17 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
     gamma_y1 <- get_gamma0(y1[,1], y1[,2], alpha, beta, C, D)
     gamma_y0 <- get_gamma0(y0[,1], y0[,2], alpha, beta, C, D)
     
-    if (run>2 && !is.null(epsilon)) {
+    if (!is.null(epsilon)) {
       logllh_old <- logllh_new
     }
-    
     if (!is.null(epsilon) || llh) {
-      logllh_new <- sum(logllh1(gamma_y1)) + sum(logllh0(gamma_y0)) +
+      logllh <- sum(logllh1(gamma_y1)) + sum(logllh0(gamma_y0))
+      logllh_new <- logllh +
         priorlambdau / 2 * norm(C, type = "F") ^ 2 + priorlambdai / 2 * norm(D, type = "F") ^ 2
     }
     if (llh){
       # Log Likelihood of current iteration
-      logllh[run] <- logllh_new
+      logllh_all[run] <- logllh
     }
     
     if (rmse){
@@ -386,7 +386,7 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
     }
   }
   
-  output <- list("alpha" = alpha, "beta" = beta, "C" = C, "D" = D, "logllh" = logllh, 
+  output <- list("alpha" = alpha, "beta" = beta, "C" = C, "D" = D, "logllh" = logllh_all, 
                  "rmse" = rmse_it, "run" = run)
   return(output)
 }
@@ -572,7 +572,7 @@ baselinePred <- function(df_train, df_test){
   df_test$predUser <- 0
   df_test$predOffer <- 0
   df_test$predOverall <- mean(df_train$CLICK)
-  df_test$predMajority <- 0
+  df_test$predMajority <- mode(df_train$CLICK)
   
   # Fill in predictions where available
   df_test$predUser <- df_test$ratioU[!is.na(df_test$ratioU)]
@@ -615,7 +615,7 @@ df <- rbind(df_train, df_test)
 
 #Combine Mail and Offer id's
 df[,"MailOffer"] <- df %>%
-  unite("MailOffer", c("MAILID" ,"OFFERID"), sep = "_")%>%
+  unite("MailOffer", c("MAILID" ,"OFFERID"), sep = "_") %>%
   select("MailOffer")
 
 # Order on click first such that NA are at bottom (no missings indices in training data)
@@ -706,7 +706,7 @@ initType <- 4
 onlyVar <- TRUE
 llh <- TRUE
 rmse <- TRUE
-epsilon <- 0.001
+epsilon <- 0.01
 
 set.seed(50)
 split <- trainTest(df, onlyVar)
