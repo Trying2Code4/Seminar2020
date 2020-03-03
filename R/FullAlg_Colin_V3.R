@@ -10,9 +10,9 @@ library(RcppArmadillo)
 library(Rcpp)
 library(ggplot2)
 
-# sourceCpp("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/gammaui.cpp")
+sourceCpp("/Users/colinhuliselan/Documents/Master/Seminar/Seminar2020_V2/R/gammaui.cpp")
 #sourceCpp("~/Dropbox/Uni/Master_Econometrie/Blok_3/Seminar2020/R/gammaui.cpp")
-sourceCpp("C:/Users/sanne/Documents/Master QM/Block 3/Seminar Case Studies/Seminar2020/R/gammaui.cpp")
+# sourceCpp("C:/Users/sanne/Documents/Master QM/Block 3/Seminar Case Studies/Seminar2020/R/gammaui.cpp")
 
 
 # Functions/tools ------------------------------------------------------------------------
@@ -88,13 +88,13 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
   # Create new indices. Make sure test is at bottom
   df <- df[order(df$train_test, df$USERID_ind, df$OFFERID_ind), ]
   df <- df %>% 
-    mutate(USERID_indN = group_indices(., factor(USERID_ind, levels = unique(USERID_ind))))
+    mutate(USERID_ind_new = group_indices(., factor(USERID_ind, levels = unique(USERID_ind))))
   df <- df %>% 
-    mutate(OFFERID_indN = group_indices(., factor(OFFERID_ind, levels = unique(OFFERID_ind))))
+    mutate(OFFERID_ind_new = group_indices(., factor(OFFERID_ind, levels = unique(OFFERID_ind))))
   
   # Split sets
   df_test <- df[as.logical(df$train_test), ]
-  df_train <- df[!(as.logical(df$train_test)), c("USERID_indN", "OFFERID_indN", "CLICK", 
+  df_train <- df[!(as.logical(df$train_test)), c("USERID_ind_new", "OFFERID_ind_new", "CLICK", 
                                                  "ratioU", "ratioO")]
   
   #4. Return
@@ -115,7 +115,8 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
 #' @export
 #'
 #' @examples
-initChoose <- function(df, factors, priorsdu, priorsdi, initType){
+initChoose <- function(df, factors, priorlamda, initType, a_in = NULL, b_in = NULL,
+                       C_in = NULL, D_in = NULL){
   # Formatting
   names(df) <- c("USERID_ind", "OFFERID_ind", "CLICK")
   
@@ -127,39 +128,9 @@ initChoose <- function(df, factors, priorsdu, priorsdi, initType){
     #Alpha and beta's initialized with a zero, C and D with normal priors
     alpha <- rep(0, nu)
     beta <- rep(0, ni)
-    C <- matrix(rnorm(nu * factors, 0, priorsdu), nu, factors)
-    D <- matrix(rnorm(ni * factors, 0, priorsdi), ni, factors)
-  }
-  # Old method by Colin that doesn't really work
-  else if (initType == 2) {
-    avg <- mean(df$CLICK)
-    gammaAvg <- -1 * log(1/avg - 1)
-    
-    gamma <- matrix(rnorm(nu * ni, 0, 1), nu, ni) + gammaAvg
-    svdGamma <- svd(gamma, nu = factors, nv = factors)
-    
-    Ctemp <- svdGamma$u %*% diag(sqrt(svdGamma$d))
-    Dtemp <- svdGamma$v %*% diag(sqrt(svdGamma$d))
-    
-    alpha <- rowMeans(Ctemp)
-    beta  <- rowMenas(Dtemp)
-    
-    C <- Ctemp - matrix(rep(alpha, factors), nu, factors)
-    D <- Dtemp - matrix(rep(beta, factors), ni, factors)
-    # Colin's method
-  } else if (initType == 3){
-    avg <- mean(df$CLICK)
-    gammaAvg <- -1 * log(1/avg - 1)
-    
-    mean <- sqrt(1/factors * abs(gammaAvg))
-    
-    Ctemp <- matrix(rnorm(nu * factors, mean, priorsdu), nu, factors)
-    Dtemp <- matrix(rnorm(ni * factors, -mean, priorsdu), ni, factors)
-    
-    alpha <- rowMeans(Ctemp)
-    beta  <- rowMeans(Dtemp)
-    C <- Ctemp - matrix(rep(alpha, factors), nu, factors)
-    D <- Dtemp - matrix(rep(beta, factors), ni, factors)
+    C <- matrix(rnorm(nu * factors, 0, 1/priorlamda), nu, factors)
+    D <- matrix(rnorm(ni * factors, 0, 1/priorlambda), ni, factors)
+  
     # Take alpha's that create avg click rate per user
   } else if (initType == 4){
     
@@ -178,44 +149,24 @@ initChoose <- function(df, factors, priorsdu, priorsdi, initType){
     
     # Simple zero means for the other parameters
     beta <- rep(0, ni)
-    C <- matrix(rnorm(nu * factors, 0, priorsdu), nu, factors)
-    D <- matrix(rnorm(ni * factors, 0, priorsdi), ni, factors)
+    C <- matrix(rnorm(nu * factors, 0, 1/priorlamda), nu, factors)
+    D <- matrix(rnorm(ni * factors, 0, 1/priorlamda), ni, factors)
   }
-  # Method 5, but adding columns means also
-  else if (initType == 5){
-    # Thijs' method
-    nu <- max(df[ ,1])
-    ni <- max(df[ ,2])
-    
-    # Make user click averages
-    temp1 <- df %>%
-      group_by(USERID_ind) %>%
-      summarize(meanCLICK = mean(CLICK)) %>%
-      select(meanCLICK)
-    
-    # Give some value when this is 0 or 1 (otherwise gamma -> inf)
-    temp1[temp1 == 0] <- 0.01 # THINK ABOUT THIS
-    temp1[temp1 == 1] <- 0.99 
-    
-    # Calculate the gamma's that produce these click rates
-    alpha <- as.matrix(-1 * log(1/temp1 - 1))
-    
-    # Make beta
-    df <- as.data.frame(t(scale(t(df), scale = FALSE)))
-    
-    temp2 <- df %>%
-      group_by(OFFERID_ind) %>%
-      summarize(meanCLICK = mean(CLICK)) %>%
-      select(meanCLICK)
-    
-    temp2[temp2 == 0] <- 0.01 # THINK ABOUT THIS
-    temp2[temp2 == 1] <- 0.99 
-    
-    beta <- as.matrix(-1 * log(1/temp2 - 1))
-    
-    C <- matrix(rnorm(nu * factors, 0, priorsdu), nu, factors)
-    D <- matrix(rnorm(ni * factors, 0, priorsdi), ni, factors)
+  
+  # If a specific input for alpha, beta C or D is given then overwrite
+  if (!is.null(a_in)){
+    alpha <- a_in
   }
+  if (!is.null(b_in)){
+    beta <- b_in
+  }
+  if (!is.null(C_in)){
+    C <- C_in
+  }
+  if (!is.null(D_in)){
+    D <- D_in
+  }
+  
   output <- list("alpha" = alpha, "beta" = beta, "C" = C, "D" = D)
   return(output)
 }
@@ -234,12 +185,13 @@ initChoose <- function(df, factors, priorsdu, priorsdi, initType){
 #' @param epsilon Convergence criteria
 #'
 #' @return returns parameters alpha, beta, C and D
-parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, iter, 
-                   initType, llh, rmse, df_test=NULL, epsilon=NULL) {
+parEst <- function(df, factors, priorlambda, iter, initType, llh, rmse, df_test=NULL, 
+                   epsilon=NULL, a_in = NULL, b_in = NULL, C_in = NULL, D_in = NULL) {
   names(df) <- c("USERID_ind", "OFFERID_ind", "CLICK")
   
   # Initialization
-  initPars <- initChoose(df, factors, priorsdu, priorsdi, initType)
+  initPars <- initChoose(df, factors, priorlambda, initType, a_inL, b_inL, C_in, 
+                         D_in)
   
   #Center required parameters for identification
   alpha <- initPars$alpha
@@ -267,7 +219,7 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
   
   if (!is.null(epsilon) || llh) {
     logllh_old <- sum(logllh1(gamma_y1)) + sum(logllh0(gamma_y0)) + 
-      priorlambdau/2 * norm(C, type="F")^2 + priorlambdai/2 * norm(D, type="F")^2
+      priorlambda/2 * norm(C, type="F")^2 + priorlambda/2 * norm(D, type="F")^2
   }
   
   if (llh) {
@@ -285,6 +237,7 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
     rmse_it <- rep(NA, (iter+1))
     temp <- getPredict(df_test, alpha, beta, C, D)
     predictions <- temp$prediction
+    # Majority rule
     predictions[is.na(predictions)] <- 0
     actuals <- temp$CLICK
     
@@ -334,13 +287,14 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
     H_slr_rowandcolmean <-splr(sparse, low_rankC, low_rankD)
     
     #Retrieve C and D from the svd.als function
-    results <- svd.als(H_slr_rowandcolmean, rank.max = factors, lambda = priorlambdau / 2)
+    results <- svd.als(H_slr_rowandcolmean, rank.max = factors, lambda = priorlambda / 2)
     
     # Updates
     alpha <- newalpha
     beta <- newbeta
     # Using CD' = (UD^1/2)(VD^1/2)'
     
+    # With one factor the ohter code gives an error due to d being scalar
     if (factors == 1) {
       C <- results$u %*% sqrt(results$d)
       D <- results$v %*% sqrt(results$d)
@@ -356,14 +310,18 @@ parEst <- function(df, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, 
     gamma_y1 <- get_gamma0(y1[,1], y1[,2], alpha, beta, C, D)
     gamma_y0 <- get_gamma0(y0[,1], y0[,2], alpha, beta, C, D)
     
+    # Epsilon condition starts taking effect after the first iteration
     if (run>2 && !is.null(epsilon)) {
       logllh_old <- logllh_new
     }
     
+    # Only bother calculating llh if we track it or we use it for the condition
     if (!is.null(epsilon) || llh) {
       logllh_new <- sum(logllh1(gamma_y1)) + sum(logllh0(gamma_y0)) +
-        priorlambdau / 2 * norm(C, type = "F") ^ 2 + priorlambdai / 2 * norm(D, type = "F") ^ 2
+        priorlambda / 2 * norm(C, type = "F") ^ 2 + priorlambda / 2 * norm(D, type = "F") ^ 2
     }
+    
+    # 
     if (llh){
       # Log Likelihood of current iteration
       logllh[run] <- logllh_new
@@ -442,17 +400,17 @@ getPredict <- function(df, alpha, beta, C, D){
 #' @export
 #'
 #' @examples
-fullAlg <- function(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau, 
-                    priorlambdai, iter, initType, llh=FALSE, rmse=FALSE, epsilon=NULL){
+fullAlg <- function(df_train, df_test, factors, priorlambda, iter, initType, llh=FALSE, 
+                    rmse=FALSE, epsilon=NULL){
   # Estimating parameters
   tic("2. Estimating parameters")
-  pars <- parEst(df_train, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, iter, 
-                 initType, llh, rmse, df_test, epsilon)
+  pars <- parEst(df_train, factors, priorlambda, iter, initType, llh, rmse, df_test, 
+                 epsilon)
   toc()
   
   # Getting predictions
   tic("3. Getting predictions")
-  results <- getPredict(df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK",
+  results <- getPredict(df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK",
                                     "ratioU", "ratioO", "prediction")], 
                         pars$alpha, pars$beta, pars$C, pars$D)
   toc()
@@ -481,11 +439,11 @@ fullAlg <- function(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau
   return(output)
 }
 
-crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, epsilon){
+crossValidate <- function(df, FACTORS, PRIORLAMBDA, INITTYPE, ONLYVAR, folds, iter, epsilon){
   
   # Initialize a multidimensional output array
   # Rows are all the possible permutations of the huperparameters * folds
-  rows <- (length(ONLYVAR) * length(FACTORS) * length(PRIORS) * length(INITTYPE)) * folds
+  rows <- (length(ONLYVAR) * length(FACTORS) * length(PRIORLAMBDA) * length(INITTYPE)) * folds
   
   # Columns for the hyperparameters, plus a name variable, and then all the results you want
   # these are: rmse, TP (true positive(1)), TN, FP, FN, number of iterations, best baseline, epsilon
@@ -493,7 +451,7 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, e
   
   # Initialize the df (depth is the number of folds)
   CVoutput <- data.frame(matrix(NA, nrow = rows, ncol = columns))
-  names(CVoutput) <- c("Factor", "PriorS", "initType", "onlyVar", "epsilon", "Specification",
+  names(CVoutput) <- c("Factor", "PriorLambda", "initType", "onlyVar", "epsilon", "Specification",
                        "RMSE", "TP", "TN", "FP", "FN", "iter", "rmseUser", "difference RMSE")
   
   # Now we loop
@@ -515,35 +473,34 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, e
       
       # Make the train test split by using the foldInd and fold as input (see trainTest)
       split <- trainTest(df, onlyVar, cv = TRUE, ind = foldInd, fold = z)
-      df_train <-split$df_train[ ,c("USERID_indN", "OFFERID_indN", "CLICK")]
+      df_train <-split$df_train[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
       df_test <- split$df_test
       
       # Loop the other hyperparameters
       for (b in 1:length(FACTORS)){
-        for (c in 1:length(PRIORS)){
+        for (c in 1:length(PRIORLAMBDA)){
           for (d in 1:length(INITTYPE)){
             tic(paste("Run", row, "out of", rows, "in fold", z, "out of ", folds))
             factors <- FACTORS[b]
-            priorsdu <- PRIORS[c]
-            priorsdi <- PRIORS[c]
+            priorlambda <- PRIORLAMBDA[c]
             initType <- INITTYPE[d]
             priorlambdau <- 1/priorsdu
             priorlambdai <- 1/priorsdi
             
             # Run the algorithm
             invisible(
-            output <- fullAlg(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau, 
-                              priorlambdai, iter, initType, epsilon = epsilon)
+            output <- fullAlg(df_train, df_test, factors, priorlambda, iter, initType, 
+                              epsilon = epsilon)
             )
             # Fill the array with output
             CVoutput[row, 1] <- factors
-            CVoutput[row, 2] <- priorsdu
+            CVoutput[row, 2] <- priorlambda
             CVoutput[row, 3] <- initType
             CVoutput[row, 4] <- onlyVar
             CVoutput[row, 5] <- epsilon
             
             # The name
-            CVoutput[row, 6] <- paste("Factor = ", factors, ", PriorS = ", priorsdu, 
+            CVoutput[row, 6] <- paste("Factor = ", factors, ", Lambda = ", priorlambda, 
                                          ", initType = ", initType, ", onlyVar = ", onlyVar,
                                          sep = "")
             
@@ -559,12 +516,20 @@ crossValidate <- function(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, e
             
             row <- row+1
             toc()
+            
+            
           }
         }
       }
     }
   }
-  return(CVoutput)
+  
+  # Create a mean table
+  CVmean <- CVoutput %>% 
+    group_by(epsilon, Specification) %>%
+    summarise_all(mean)
+  
+  return(list("CVoutput" = CVoutput, "CVmean" = CVmean))
 }
 
 baselinePred <- function(df_train, df_test){
@@ -669,12 +634,12 @@ priorlambdai <- 1/priorsdi
 iter <- 100
 initType <- 4
 onlyVar <- FALSE
-epsilon <- 
+epsilon <- 0.001
 
 tic("1. Train test split")
 split <- trainTest(df, onlyVar)
-df_train <-split$df_train[ ,c("USERID_indN", "OFFERID_indN", "CLICK")]
-df_test <- split$df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK", "ratioU", "ratioO", "prediction")]
+df_train <-split$df_train[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
+df_test <- split$df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU", "ratioO", "prediction")]
 rm("split")
 toc()
 
@@ -710,9 +675,8 @@ epsilon <- 0.001
 
 set.seed(50)
 split <- trainTest(df, onlyVar)
-df_train <- split$df_train[ ,c("USERID_indN", "OFFERID_indN", "CLICK")]
-df_test <- split$df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK", "ratioU", "ratioO", "prediction")]
-
+df_train <- split$df_train[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
+df_test <- split$df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU", "ratioO", "prediction")]
 rm("split")
 
 output <- fullAlg(df_train, df_test, factors, priorsdu, priorsdi, priorlambdau, 
@@ -782,11 +746,11 @@ gameResults <- getPredict(df_test, pars$alpha, pars$beta, pars$C, pars$D)
 df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
 df_train <- trainTest(df)$df_train
 
-max(df_train$USERID_indN)
-length(unique(df_train$USERID_indN))
+max(df_train$USERID_ind_new)
+length(unique(df_train$USERID_ind_new))
 
-max(df_train$OFFERID_indN)
-length(unique(df_train$OFFERID_indN))
+max(df_train$OFFERID_ind_new)
+length(unique(df_train$OFFERID_ind_new))
 
 # General parameter estimation algorithm testing
 factors <- 2
@@ -839,14 +803,9 @@ D <- output$parameters$D
 alpha <- output$parameters$alpha
 beta <- output$parameters$beta
 
-test <- getPredict(df_test[ ,c("USERID_indN", "OFFERID_indN", "CLICK", "prediction")], 
+test <- getPredict(df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "prediction")], 
                    alpha, beta, C, D)
 
 test$prediction[is.na(test$prediction)] <- 0
 
 hist(test$prediction)
-
-# Problem with indices ------------------------------------------------------------------
-
-
-
