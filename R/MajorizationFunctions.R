@@ -236,19 +236,22 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
   run <- 1
   
   if (!is.null(epsilon) || llh) {
-    logllh <- sum(logllh1(gamma_y1)) + sum(logllh0(gamma_y0))
-    logllh_new <- logllh + 
+    deviance_new <- sum(logllh1(gamma_y1)) + sum(logllh0(gamma_y0))
+    objective_new <- deviance_new + 
       lambda/2 * norm(C, type="F")^2 + lambda/2 * norm(D, type="F")^2
   }
   
   if (llh) {
     # Keeping track of likelihoods
-    logllh_all <- rep(NA, (iter+1))
+    deviance_all <- rep(NA, (iter+1))
+    objective_all <- rep(NA, (iter+1))
     
     # Calculate log likelihood
-    logllh_all[run] <- logllh
+    deviance_all[run] <- deviance_new
+    objective_all[run] <- objective_new
   } else {
-    logllh_all <- NA
+    deviance_all <- NA
+    objective_all <- NA
   }
   
   if (rmse) {
@@ -330,18 +333,20 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     gamma_y0 <- get_gamma0(y0[,1], y0[,2], alpha, beta, C, D)
     
     if (!is.null(epsilon)) {
-      logllh_old <- logllh_new
+      deviance_old <- deviance_new
+      objective_old <- objective_new
     }
     if (!is.null(epsilon) || llh) {
-      logllh <- sum(logllh1(gamma_y1)) + sum(logllh0(gamma_y0))
-      logllh_new <- logllh +
+      deviance_new <- sum(logllh1(gamma_y1)) + sum(logllh0(gamma_y0))
+      objective_new <- deviance_new +
         lambda / 2 * norm(C, type = "F") ^ 2 + lambda / 2 * norm(D, type = "F") ^ 2
     }
     
     # 
     if (llh){
       # Log Likelihood of current iteration
-      logllh_all[run] <- logllh
+      deviance_all[run] <- deviance_new
+      objective_all[run] <- objective_new
     }
     
     if (rmse){
@@ -356,13 +361,16 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     # toc()
     
     if (!is.null(epsilon)) {
-      print((logllh_new-logllh_old)/logllh_old)
-      if (abs((logllh_new-logllh_old)/logllh_old) < epsilon) break
+      if (!is.infinite(objective_new) && !is.infinite(objective_old)) {
+        print(paste("Change in deviance is", (deviance_new-deviance_old)/deviance_old, sep=" "))
+        print((objective_new-objective_old)/objective_old)
+        if (abs((objective_new-objective_old)/objective_old) < epsilon) break
+      }
     }
   }
   
-  output <- list("alpha" = alpha, "beta" = beta, "C" = C, "D" = D, "logllh" = logllh_all, 
-                 "rmse" = rmse_it, "run" = run)
+  output <- list("alpha" = alpha, "beta" = beta, "C" = C, "D" = D, "objective" = objective_all, 
+                 "deviance" = deviance_all, "rmse" = rmse_it, "run" = run)
   return(output)
 }
 

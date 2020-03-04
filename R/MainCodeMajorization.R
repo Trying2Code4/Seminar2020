@@ -9,8 +9,8 @@ library(ggplot2)
 
 # sourceCpp("/Users/colinhuliselan/Documents/Master/Seminar/Seminar2020_V2/R/gammaui.cpp")
 #sourceCpp("~/Dropbox/Uni/Master_Econometrie/Blok_3/Seminar2020/R/gammaui.cpp")
-sourceCpp("C:/Users/sanne/Documents/Master QM/Block 3/Seminar Case Studies/Seminar2020/R/gammaui.cpp")
-source("C:/Users/sanne/Documents/Master QM/Block 3/Seminar Case Studies/Seminar2020/R/MajorizationFunctions.R")
+sourceCpp("gammaui.cpp")
+source("MajorizationFunctions.R")
 
 # Preparing data -------------------------------------------------------------------------
 # This is how you should import the data.
@@ -117,7 +117,7 @@ df <- df[df$USERID_ind < 10000, c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU"
 factors <- 4
 lambda <- 1
 iter <- 200
-initType <- 4
+initType <- 2
 onlyVar <- TRUE
 llh <- TRUE
 rmse <- TRUE
@@ -129,16 +129,22 @@ df_train <- split$df_train[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
 df_test <- split$df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU", "ratioO", "prediction")]
 rm("split")
 
-output <- fullAlg(df_train, df_test, factors, lambda, iter, initType, llh, rmse, epsilon)
+output <- fullAlg(df_train, df_test, factors, lambda, iter, initType, llh, 
+                  rmse, epsilon)
 
 baseline <- baselinePred(df_train2, df_test2)
 
 
 # Visualization
 hist(output2$prediction$prediction)
-xdata <- seq(1, iter+1)
-plot(xdata, output$parameters$logllh, col="blue")
-plot(xdata, output$parameters$rmse_it, col="red")
+# xdata <- c(1:output$parameters$run)
+
+plot(output$parameters$objective[1:sum(!is.na(output$parameters$objective))],
+     col="blue", type = "l", ylab="Objective Function", xlab="Iteration")
+plot(output$parameters$deviance[1:sum(!is.na(output$parameters$deviance))],
+     col="green", type = "l", ylab="Deviance", xlab="Iteration")
+plot(output$parameters$rmse[1:sum(!is.na(output$parameters$rmse))],
+     col="red", type = "l", ylab="RMSE", xlab="Iteration")
 
 # Cross validation -----------------------------------------------------------------------
 # Import train set
@@ -149,13 +155,13 @@ df <- df[df$USERID_ind < 10000, c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU"
 
 
 # Input whichever hyperparameters you want to test
-FACTORS <- c(1)
-LAMBDA <- c(1:3)
+FACTORS <- c(50)
+LAMBDA <- c(1,5,10,25,50,100,250,500,1000,2500,5000,10000)
 INITTYPE <- c(2)
 ONLYVAR <- c(TRUE, FALSE)
 folds <- 5
 iter <- 1000
-epsilon <- 1e-04
+epsilon <- 1e-08
 warm <- TRUE
 
 CVoutput <- crossValidate(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter, 
