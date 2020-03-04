@@ -70,48 +70,16 @@ saveRDS(df_test, "/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/d
 # saveRDS(df_train, "~/Google Drive/Seminar 2020/Data/df_train")
 # saveRDS(df_test, "~/Google Drive/Seminar 2020/Data/df_test")
 
-
-# Train/test pred. -----------------------------------------------------------------
-# Makes predictions for a train/test split for the FULL training set
-# Also, includes columns/rows with only 0 or 1
-
-# Use "Preparing data" first to get the df_train object
-#df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
-df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
-df <- df[ ,c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")]
-
-# Setting parameters
-factors <- 2
-lambda <- 1
-iter <- 100
-initType <- 4
-onlyVar <- TRUE
-llh <- TRUE
-rmse <- TRUE
-epsilon <- 0.01
-
-set.seed(50)
-split <- trainTest(df, onlyVar)
-df_train <- split$df_train[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
-df_test <- split$df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU", "ratioO", "prediction")]
-rm("split")
-
-output <- fullAlg(df_train, df_test, factors, lambda, iter, initType, llh, rmse, 
-                  epsilon)
-
-baseline <- baselinePred(df_train, df_test)
-
-# Visualization
-hist(output$prediction$prediction)
-plot(output$parameters$logllh)
-
-# Train/test pred. SUB --------------------------------------------------------------
+# Train/test pred. (SUBSET) --------------------------------------------------------------
 # Makes predictions for a train/test split for A SUBSET of the training set
 # Also, includes columns/rows with only 0 or 1
 
 # Use "Preparing data" first to get the df_train object
 df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
-df <- df[df$USERID_ind < 10000, c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")]
+df <- df[, c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")]
+
+# Run this if you want to use a subset of data!
+df <- df[df$USERID_ind < 10000, ]
 
 # Setting parameters
 factors <- 4
@@ -153,15 +121,14 @@ plot(output$parameters$rmse[1:sum(!is.na(output$parameters$rmse))],
 df <- readRDS("C:/Users/sanne/Documents/Master QM/Block 3/Seminar Case Studies/Seminar R-Code/df_train")
 df <- df[df$USERID_ind < 10000, c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")]
 
-
 # Input whichever hyperparameters you want to test
-FACTORS <- c(50)
-LAMBDA <- c(1,5,10,25,50,100,250,500,1000,2500,5000,10000)
+FACTORS <- c(5)
+LAMBDA <- c(100,250,500,1000,2500,5000,10000)
 INITTYPE <- c(2)
 ONLYVAR <- c(TRUE, FALSE)
 folds <- 5
 iter <- 1000
-epsilon <- 1e-08
+epsilon <- 1e-05
 warm <- TRUE
 
 CVoutput <- crossValidate(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter, 
@@ -188,86 +155,9 @@ df_test <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR
 #Caclulcating parameters
 #Hyperparameters
 factors <- 2
-priorsdu <- 1
-priorsdi <- 1
-priorlambdau <- 1/priorsdu
-priorlambdai <- 1/priorsdi
+lambda <- 1
 
 pars <- getPars(df_train[ ,c("USERID_ind", "OFFERID_ind", "CLICK")], 
                 factors, priorsdu, priorsdi, priorlambdau, priorlambdai)
 
 gameResults <- getPredict(df_test, pars$alpha, pars$beta, pars$C, pars$D)
-
-# SOME TESTING ---------------------------------------------------------------------------
-
-# See whether the indices are made correctly
-df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
-df_train <- trainTest(df)$df_train
-
-max(df_train$USERID_ind_new)
-length(unique(df_train$USERID_ind_new))
-
-max(df_train$OFFERID_ind_new)
-length(unique(df_train$OFFERID_ind_new))
-
-# General parameter estimation algorithm testing
-factors <- 2
-priorsdu <- 2.5
-priorsdi <- 2.5
-priorlambdau <- 1/priorsdu
-priorlambdai <- 1/priorsdi
-iter <- 0
-initType <- 1
-
-
-df_trainOrg <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
-df_testOrg <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_test")
-
-df_train <- df_train[order(df_train$USERID_ind, df_train$OFFERID_ind), ]
-df_trainOrg <- df_train[order(df_train$USERID_ind, df_train$OFFERID_ind), ]
-
-sum(df_train$ratioU - df_trainOrg$ratioU)
-
-sum(is.na(df_train$ratioU))
-sum(is.na(df_trainOrg$ratioU))
-
-
-
-
-
-
-
-
-
-alpha <- df %>%
-  group_by(USERID_ind) %>%
-  summarize(meanCLICK = mean(CLICK))
-
-temp <- df %>%
-  group_by(USERID_ind) %>%
-  summarize(meanCLICK = mean(CLICK)) %>%
-  select(meanCLICK)
-
-
-alpha <- -1 * log(1/meanCLICK - 1)
-
-beta <- rep(0, ni)
-
-
-pars <- parEst(parEst(df_train, factors, priorsdu, priorsdi, priorlambdau, priorlambdai, iter, initType))
-
-C <- output$parameters$C
-D <- output$parameters$D
-alpha <- output$parameters$alpha
-beta <- output$parameters$beta
-
-test <- getPredict(df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "prediction")], 
-                   alpha, beta, C, D)
-
-test$prediction[is.na(test$prediction)] <- 0
-
-hist(test$prediction)
-
-# Problem with indices ------------------------------------------------------------------
-
-df_test <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_test")
