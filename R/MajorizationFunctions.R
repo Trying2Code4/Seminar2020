@@ -158,7 +158,7 @@ initChoose <- function(df, factors, lambda, initType, a_in = NULL, b_in = NULL,
     user_avg[user_avg == 1] <- 0.99 
     
     # Calculate the gamma's that produce these click rates
-    alpha <- as.matrix(-1 * log(1/temp - 1))
+    alpha <- as.matrix(-1 * log(1/user_avg - 1))
     
     # Simple zero means for the other parameters
     beta <- rep(0, ni)
@@ -254,11 +254,11 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
   if (rmse) {
     # Keeping track of rmse
     rmse_it <- rep(NA, (iter+1))
-    temp <- getPredict(df_test, alpha, beta, C, D)
-    predictions <- temp$prediction
+    pred <- getPredict(df_test, alpha, beta, C, D)
+    predictions <- pred$prediction
     # Majority rule
     predictions[is.na(predictions)] <- 0
-    actuals <- temp$CLICK
+    actuals <- pred$CLICK
     
     rmse[run] <- sqrt(mean((predictions - actuals)^2))
   } else {
@@ -346,10 +346,10 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     
     if (rmse){
       # RMSE of current iteration
-      temp <- getPredict(df_test, alpha, beta, C, D)
-      predictions <- temp$prediction
+      pred <- getPredict(df_test, alpha, beta, C, D)
+      predictions <- pred$prediction
       predictions[is.na(predictions)] <- 0
-      actuals <- temp$CLICK
+      actuals <- pred$CLICK
       
       rmse_it[run] <- sqrt(mean((predictions - actuals)^2))
     }
