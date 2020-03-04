@@ -278,7 +278,7 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     H_slr_rowandcolmean <-splr(sparse, low_rankC, low_rankD)
     
     #Retrieve C and D from the svd.als function
-    results <- svd.als(H_slr_rowandcolmean, rank.max = factors, lambda = priorlambdau / 2)
+    results <- svd.als(H_slr_rowandcolmean, rank.max = factors, lambda = lambda / 2)
     
     # Updates
     alpha <- newalpha
@@ -695,17 +695,18 @@ df <- readRDS("\\\\campus.eur.nl\\users\\Students\\426416sl\\Documents\\Seminar\
 df <- df[df$USERID_ind < 10000, c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")]
 
 # Input whichever hyperparameters you want to test
-FACTORS <- c(4, 5, 6)
-PRIORS <- c(2, 3, 4)
-INITTYPE <- c(4)
+FACTORS <- c(5, 10, 15, 20, 25)
+PRIORS <- c(100, 200, 500, 1000, 2000, 5000, 10000)
+INITTYPE <- c(2)
 ONLYVAR <- c(TRUE, FALSE)
 folds <- 5
 iter <- 1000
 epsilon <- 0.01
+warm <- TRUE
 
-CVoutput <- crossValidate(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, epsilon)
+CVoutput <- crossValidate(df, FACTORS, PRIORS, INITTYPE, ONLYVAR, folds, iter, epsilon, warm)
 
-test_CVoutput <- crossValidate(df, FACTORS=c(1), PRIORS=c(1), INITTYPE=c(4), ONLYVAR=c(T), folds=c(2), iter=c(2), epsilon=0.01)
+test_CVoutput <- crossValidate(df, FACTORS=c(1), PRIORS=c(1), INITTYPE=c(2), ONLYVAR=c(T), folds=c(2), iter=c(2), epsilon=0.01)
 
 
 # Visualizing output
@@ -716,23 +717,3 @@ p <- ggplot(CVoutput, aes(x=Specification, y=RMSE)) +
 p
 
 CVoutput$RMSE
-
-# Final predictions ----------------------------------------------------------------------
-# If you want predictions for the final set
-
-# Import test and train set
-df_train <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
-df_test <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_test")
-
-#Caclulcating parameters
-#Hyperparameters
-factors <- 2
-priorsdu <- 1
-priorsdi <- 1
-priorlambdau <- 1/priorsdu
-priorlambdai <- 1/priorsdi
-
-pars <- getPars(df_train[ ,c("USERID_ind", "OFFERID_ind", "CLICK")], 
-                factors, priorsdu, priorsdi, priorlambdau, priorlambdai)
-
-gameResults <- getPredict(df_test, pars$alpha, pars$beta, pars$C, pars$D)
