@@ -40,11 +40,11 @@ derf2 <- function(x){
   return(1 / (1 + exp(-x)))
 }
 
-#' Sigmoid function
+#' Logistic function
 #'
 #' @param x vector of doubles
 #'
-#' @return sigmoid function evaluated in x
+#' @return Logistic function evaluated in x
 #'
 mu <- function(x){
   return(1 / (1 + exp(-x)))
@@ -233,6 +233,7 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
   gamma_y1 <- get_gamma0(y1[,1], y1[,2], alpha, beta, C, D)
   gamma_y0 <- get_gamma0(y0[,1], y0[,2], alpha, beta, C, D)
   
+  # Initialize iteration number
   run <- 1
   
   if (!is.null(epsilon) || llh) {
@@ -342,7 +343,6 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
         lambda / 2 * norm(C, type = "F") ^ 2 + lambda / 2 * norm(D, type = "F") ^ 2
     }
     
-    # 
     if (llh){
       # Log Likelihood of current iteration
       deviance_all[run] <- deviance_new
@@ -362,7 +362,7 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     
     if (!is.null(epsilon)) {
       if (!is.infinite(objective_new) && !is.infinite(objective_old)) {
-        print(paste("Change in deviance is", (deviance_new-deviance_old)/deviance_old, sep=" "))
+        print(paste("Iter", run, "Change in deviance is", (deviance_new-deviance_old)/deviance_old, sep=" "))
         print((objective_new-objective_old)/objective_old)
         if (abs((objective_new-objective_old)/objective_old) < epsilon) break
       }
@@ -607,9 +607,11 @@ baselinePred <- function(df_train, df_test){
   rmseOffer <- sqrt(mean((df_test$predOffer - df_test$CLICK)^2))
   rmseOverall <- sqrt(mean((df_test$predOverall - df_test$CLICK)^2))
   rmseMajority <- sqrt(mean((df_test$predMajority - df_test$CLICK)^2))
+  rmseComb <- sqrt(mean((0.5*df_test$predOffer + 0.5*df_test$predUser - df_test$CLICK)^2))
   
   output <- list("df_test" = df_test, "rmseUser" = rmseUser, "rmseOffer" = rmseOffer, 
-                 "rmseOverall" = rmseOverall, "rmseMajority" = rmseMajority)
+                 "rmseOverall" = rmseOverall, "rmseMajority" = rmseMajority,
+                 "rmseComb" = rmseComb)
   
   return(output)
 }
