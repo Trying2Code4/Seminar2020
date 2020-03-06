@@ -122,7 +122,7 @@ initType <- 2
 onlyVar <- TRUE
 llh <- TRUE
 rmse <- TRUE
-epsilon <- 0.01
+epsilon <- 0.0001
 
 set.seed(50)
 split <- trainTest(df, onlyVar)
@@ -130,6 +130,7 @@ df_train <- split$df_train[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
 df_test <- split$df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU", "ratioO", "prediction")]
 rm("split")
 
+set.seed(0)
 output <- fullAlg(df_train, df_test, factors, lambda, iter, initType, llh, 
                   rmse, epsilon)
 
@@ -140,12 +141,16 @@ baseline <- baselinePred(df_train2, df_test2)
 hist(output2$prediction$prediction)
 # xdata <- c(1:output$parameters$run)
 
+par(mfrow=c(2,2))
 plot(output$parameters$objective[1:sum(!is.na(output$parameters$objective))],
      col="blue", type = "l", ylab="Objective Function", xlab="Iteration")
 plot(output$parameters$deviance[1:sum(!is.na(output$parameters$deviance))],
      col="green", type = "l", ylab="Deviance", xlab="Iteration")
 plot(output$parameters$rmse[1:sum(!is.na(output$parameters$rmse))],
      col="red", type = "l", ylab="RMSE", xlab="Iteration")
+plot(output$parameters$factors[1:sum(!is.na(output$parameters$factors))],
+     col="orange", type = "l", ylab="Number of factors", xlab="Iteration")
+par(mfrow=c(1,1))
 
 # Cross validation -----------------------------------------------------------------------
 # Import train set

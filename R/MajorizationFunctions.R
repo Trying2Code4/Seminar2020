@@ -100,7 +100,7 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
     
     # Assign the 0 or 1 to test set obs where a ratio is 0 or 1 (prediction in advance)
     df_test$prediction[(df_test$ratioU_new == 0 | df_test$ratioO_new == 0)] <- 0
-    df_test$prediction[(df_test$ratioU_new == 1 | df_test$ratioO_new == 1)] <- 1
+    # df_test$prediction[(df_test$ratioU_new == 1 | df_test$ratioO_new == 1)] <- 1
     
     # Drop the train obs where a ratio is 0 or 1
     # df_train <- df_train[!(df_train$ratioU_new == 0 | df_train$ratioO_new == 0 | 
