@@ -62,7 +62,7 @@ mu <- function(x){
 #' 
 trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
   # Formatting
-  names(df) <- c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")
+  names(df)[1:5] <- c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")
   
   df$train_test <- rep(NA, nrow(df))
   # Make the test train split (test is 1)
@@ -76,6 +76,18 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
     df$train_test <- rbinom(n = nrow(df), size = 1, prob = 0.2)
   }
   
+  # Sum of clicks in train set (per user/offer)
+  df <- df %>% group_by(USERID_ind) %>% mutate(sum_click_user = sum((!as.logical(train_test))*CLICK)) %>% ungroup()
+  df <- df %>% group_by(OFFERID_ind) %>% mutate(sum_click_offer = sum((!as.logical(train_test))*CLICK)) %>% ungroup()
+  
+  # Number of observations in train set (per user/offer)
+  df <- df %>% group_by(USERID_ind) %>% mutate(count_user = sum(!as.logical(train_test))) %>% ungroup()
+  df <- df %>% group_by(OFFERID_ind) %>% mutate(count_offer = sum(!as.logical(train_test))) %>% ungroup()
+  
+  # User/offer click rate in train set (if user or offer not in train set, average is set at NaN)
+  df$ratioU_new <- df$sum_click_user/df$count_user
+  df$ratioO_new <- df$sum_click_offer/df$count_offer
+  
   # Pre-allocate column for predictions
   df$prediction <- rep(NA, nrow(df))
   
@@ -87,12 +99,12 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
     df_train <- df[!(as.logical(df$train_test)), ]
     
     # Assign the 0 or 1 to test set obs where a ratio is 0 or 1 (prediction in advance)
-    df_test$prediction[(df_test$ratioU == 0 | df_test$ratioO == 0)] <- 0
-    df_test$prediction[(df_test$ratioU == 1 | df_test$ratioO == 1)] <- 1
+    df_test$prediction[(df_test$ratioU_new == 0 | df_test$ratioO_new == 0)] <- 0
+    df_test$prediction[(df_test$ratioU_new == 1 | df_test$ratioO_new == 1)] <- 1
     
     # Drop the train obs where a ratio is 0 or 1
-    df_train <- df_train[!(df_train$ratioU == 0 | df_train$ratioO == 0 | 
-                             df_train$ratioU == 1 | df_train$ratioO == 1), ]
+    df_train <- df_train[!(df_train$ratioU_new == 0 | df_train$ratioO_new == 0 | 
+                             df_train$ratioU_new == 1 | df_train$ratioO_new == 1), ]
     
     # Merge the two to make indices
     df <- rbind(df_train, df_test)
@@ -108,7 +120,7 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
   # Split sets
   df_test <- df[as.logical(df$train_test), ]
   df_train <- df[!(as.logical(df$train_test)), c("USERID_ind_new", "OFFERID_ind_new", "CLICK", 
-                                                 "ratioU", "ratioO")]
+                                                 "ratioU_new", "ratioO_new")]
   
   # Return
   output <- list("df_train" = df_train, "df_test" = df_test)
@@ -132,7 +144,7 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
 initChoose <- function(df, factors, lambda, initType, a_in = NULL, b_in = NULL,
                        C_in = NULL, D_in = NULL){
   # Formatting
-  names(df) <- c("USERID_ind", "OFFERID_ind", "CLICK")
+  names(df)[1:3] <- c("USERID_ind", "OFFERID_ind", "CLICK")
   
   nu <- max(df[, "USERID_ind"])
   ni <- max(df[, "OFFERID_ind"])
@@ -206,7 +218,7 @@ initChoose <- function(df, factors, lambda, initType, a_in = NULL, b_in = NULL,
 #' 
 parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL, 
                    epsilon=NULL, a_in = NULL, b_in = NULL, C_in = NULL, D_in = NULL) {
-  names(df) <- c("USERID_ind", "OFFERID_ind", "CLICK")
+  names(df)[1:3] <- c("USERID_ind", "OFFERID_ind", "CLICK")
   
   # Initialization
   initPars <- initChoose(df, factors, lambda, initType, a_in, b_in, C_in, 
@@ -393,7 +405,7 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
 #'
 #' @return dataframe including predictions, NA for unknown users/items
 getPredict <- function(df, alpha, beta, C, D){
-  names(df) <- c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO", "prediction")
+  names(df)[1:6] <- c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO", "prediction")
   
   # By using the size of C and D, we can infer which obs are missing in training
   maxU <- nrow(C)
@@ -401,7 +413,7 @@ getPredict <- function(df, alpha, beta, C, D){
   
   # Marking offer/items that are non existent in the training set
   df$nonMiss <- ((df[ ,"USERID_ind"]  <= maxU) & (df[ ,"OFFERID_ind"] <= maxI))
-
+  
   # Predciting for the non missing obs
   # Get the non missing indices
   nonMiss <- as.matrix(df[df$nonMiss, c("USERID_ind", "OFFERID_ind")])
