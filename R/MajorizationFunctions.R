@@ -389,6 +389,11 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     }
     
     # Keeping track of the number of factors
+    if (factors == 1){
+      factors_all[run] <- sum(results$d > 0 )
+    } else{
+      factors_all[run] <- sum(diag(results$d) > 0)
+    }
     factors_all[run] <- sum(results$d)
     
   }
