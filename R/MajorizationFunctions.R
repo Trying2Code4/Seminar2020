@@ -382,7 +382,7 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     
     if (!is.null(epsilon)) {
       if (!is.infinite(objective_new) && !is.infinite(objective_old)) {
-        print(paste("Iter", run, "Change in deviance is", (deviance_new-deviance_old)/deviance_old, sep=" "))
+        print(paste("Iter", run-1, "Change in deviance is", (deviance_new-deviance_old)/deviance_old, sep=" "))
         print((objective_new-objective_old)/objective_old)
         if (abs((objective_new-objective_old)/objective_old) < epsilon) break
       }

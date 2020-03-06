@@ -115,9 +115,9 @@ df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_t
 df <- df[df$USERID_ind < 10000, c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")]
 
 # Setting parameters
-factors <- 4
-lambda <- 1
-iter <- 200
+factors <- 20
+lambda <- 20
+iter <- 1000
 initType <- 2
 onlyVar <- TRUE
 llh <- TRUE
