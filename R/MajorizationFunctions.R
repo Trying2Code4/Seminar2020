@@ -394,7 +394,6 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     } else{
       factors_all[run] <- sum(diag(results$d) > 0)
     }
-    factors_all[run] <- sum(results$d)
     
   }
   
