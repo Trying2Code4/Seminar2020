@@ -118,7 +118,7 @@ plot(output$parameters$rmse[1:sum(!is.na(output$parameters$rmse))],
 # Import train set
 # Make sure the names are correct
 # df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
-df <- readRDS("C:/Users/sanne/Documents/Master QM/Block 3/Seminar Case Studies/Seminar R-Code/df_train")
+df <- readRDS("df_train")
 df <- df[df$USERID_ind < 10000, c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")]
 
 # Input whichever hyperparameters you want to test

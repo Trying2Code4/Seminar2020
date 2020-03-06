@@ -64,6 +64,7 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
   # Formatting
   names(df) <- c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")
   
+  df$train_test <- rep(NA, nrow(df))
   # Make the test train split (test is 1)
   if (cv){
     # In case of cross validation (recode to zeroes and ones for ease)
@@ -76,7 +77,7 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
   }
   
   # Pre-allocate column for predictions
-  df$prediction <- NA
+  df$prediction <- rep(NA, nrow(df))
   
   # Deleting the rows/columns without variation
   if (onlyVar) {
@@ -264,7 +265,7 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     predictions[is.na(predictions)] <- 0
     actuals <- pred$CLICK
     
-    rmse[run] <- sqrt(mean((predictions - actuals)^2))
+    rmse_it[run] <- sqrt(mean((predictions - actuals)^2))
   } else {
     rmse_it <- NA
   }
@@ -392,7 +393,7 @@ getPredict <- function(df, alpha, beta, C, D){
   
   # Marking offer/items that are non existent in the training set
   df$nonMiss <- ((df[ ,"USERID_ind"]  <= maxU) & (df[ ,"OFFERID_ind"] <= maxI))
-  
+
   # Predciting for the non missing obs
   # Get the non missing indices
   nonMiss <- as.matrix(df[df$nonMiss, c("USERID_ind", "OFFERID_ind")])
