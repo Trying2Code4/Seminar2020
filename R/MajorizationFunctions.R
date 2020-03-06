@@ -270,6 +270,10 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     rmse_it <- NA
   }
   
+  # Keeping track of the number of factors
+  factors_all <- rep(NA, (iter+1))
+  factors_all[run] <- factors
+  
   while (run <= iter) {
     # tic(paste("Complete iteration", run, sep = " "))
     #Define low rank representation of gamma0
@@ -368,10 +372,14 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
         if (abs((objective_new-objective_old)/objective_old) < epsilon) break
       }
     }
+    
+    # Keeping track of the number of factors
+    factors_all[run] <- sum(results$d)
+    
   }
   
   output <- list("alpha" = alpha, "beta" = beta, "C" = C, "D" = D, "objective" = objective_all, 
-                 "deviance" = deviance_all, "rmse" = rmse_it, "run" = run)
+                 "deviance" = deviance_all, "rmse" = rmse_it, "run" = run, "factors" = factors_all)
   return(output)
 }
 
@@ -608,9 +616,11 @@ baselinePred <- function(df_train, df_test){
   rmseOffer <- sqrt(mean((df_test$predOffer - df_test$CLICK)^2))
   rmseOverall <- sqrt(mean((df_test$predOverall - df_test$CLICK)^2))
   rmseMajority <- sqrt(mean((df_test$predMajority - df_test$CLICK)^2))
+  rmseComb <- sqrt(mean((0.5*df_test$predOffer + 0.5*df_test$predUser - df_test$CLICK)^2))
   
   output <- list("df_test" = df_test, "rmseUser" = rmseUser, "rmseOffer" = rmseOffer, 
-                 "rmseOverall" = rmseOverall, "rmseMajority" = rmseMajority)
+                 "rmseOverall" = rmseOverall, "rmseMajority" = rmseMajority,
+                 "rmseComb" = rmseComb)
   
   return(output)
 }
