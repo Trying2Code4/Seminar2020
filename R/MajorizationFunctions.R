@@ -1,3 +1,7 @@
+library(softImpute)
+library(tidyverse)
+library(tictoc)
+
 # FUNCTIONS FOR MAJORIZATION ------------------------------------------------------------------------
 
 #' Partial loglikelihood when observed value is 1
@@ -82,6 +86,9 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
   
   df$prediction <- rep(NA, nrow(df))
   
+  # Set predictions of observations that have user mean zero AND are in the test set to zero
+  df$prediction[df$ratioU_new == 0 & as.logical(df$train_test)] <- 0
+  
   # Predict zeroes for users with mean zero, and remove them from the training set
   if (onlyVar) {
     
@@ -103,9 +110,6 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
 
     # Merge the two to make indices
     # df <- rbind(df_train, df_test)
-    
-    # Set predictions of observations that have user mean zero AND are in the test set to zero
-    df$prediction[df$ratioU_new == 0 & as.logical(df$train_test)] <- 0
     
     # Exclude observations that have user mean zero AND are in the training set
     df <- df[!(df$ratioU_new == 0 & !as.logical(df$train_test)), ]
@@ -170,7 +174,7 @@ initChoose <- function(df, factors, lambda, initType, a_in = NULL, b_in = NULL,
     user_avg[user_avg == 0] <- 0.00001 # THINK ABOUT THIS
     user_avg[user_avg == 1] <- 0.99999
     
-    # Calculate the gamma's that produce these click rates
+    # Calculate the gammas that produce these click rates
     alpha <- as.matrix(-1 * log(1/user_avg - 1))
     
     #Make offer click averages
@@ -183,15 +187,20 @@ initChoose <- function(df, factors, lambda, initType, a_in = NULL, b_in = NULL,
     offer_avg[offer_avg == 0] <- 0.00001 # THINK ABOUT THIS
     offer_avg[offer_avg == 1] <- 0.99999
     
-    # Calculate the gamma's that produce these click rates
+    # Calculate the gammas that produce these click rates
     beta <- as.matrix(-1 * log(1/offer_avg - 1))
     
-    # Simple zero means for the other parameters
     C <- matrix(rnorm(nu * factors, 0, 1/lambda), nu, factors)
     D <- matrix(rnorm(ni * factors, 0, 1/lambda), ni, factors)
   }
   
-  # If a specific input for alpha, beta C or D is given then overwrite
+  #Center required parameters for identification
+  beta <- scale(beta, scale = FALSE)
+  C <- scale(C, scale = FALSE)
+  D <- scale(D, scale = FALSE)
+  
+  # If a specific input for alpha, beta C or D is given,
+  # overwrite previously defined parameters
   if (!is.null(a_in)){
     alpha <- a_in
   }
@@ -232,15 +241,14 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
                    epsilon=NULL, a_in = NULL, b_in = NULL, C_in = NULL, D_in = NULL) {
   names(df)[1:3] <- c("USERID_ind", "OFFERID_ind", "CLICK")
   
-  # Initialization
+  # Initialization (including centering)
   initPars <- initChoose(df, factors, lambda, initType, a_in, b_in, C_in, 
                          D_in)
   
-  #Center required parameters for identification
   alpha <- initPars$alpha
-  beta <- scale(initPars$beta, scale = FALSE)
-  C <- scale(initPars$C, scale = FALSE)
-  D <- scale(initPars$D, scale = FALSE)
+  beta <- initPars$beta
+  C <- initPars$C
+  D <- initPars$D
   
   # Because Thijs' code uses matrix
   df <- as.matrix(df)
@@ -300,45 +308,44 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
   
   while (run <= iter) {
     # tic(paste("Complete iteration", run, sep = " "))
-    #Define low rank representation of gamma0
+    # Define low rank representation of gamma0
     low_rankC <- cbind(C, alpha, rep(1, nu))
     low_rankD <- cbind(D, rep(1,ni), beta)
     
-    #Calculate gamma0
+    # Calculate gamma0
     # gamma0 <- low_rankC %*% t(low_rankD)
     
-    #Calculate respective first derivatives for both y=1 and y=0
+    # Calculate respective first derivatives for both y=1 and y=0
     df1[,"deriv"] <- -4 * derf1(gamma_y1)
     df0[,"deriv"] <- -4 * derf2(gamma_y0)
     
     # df1 <- cbind(y1, "deriv" = -4 * derf1(gamma0[y1]))
     # df0 <- cbind(y0, "deriv" = -4 * derf2(gamma0[y0]))
     
-    #Combine the results in one matrix
+    # Combine the results in one matrix
     df01 <- rbind(df1, df0)
     
-    #Turn this matrix to sparse, notice that the dims had to be manually set
-    # (for missing items probably)
+    # Create sparse matrix
     sparse <- sparseMatrix(i = (df01[ ,"USERID_ind"]), j = (df01[ ,"OFFERID_ind"]),
                            x = df01[ ,"deriv"], dims = c(nu, ni))
     
-    #Calculating the H matrix for alpha update
+    # Calculating the H matrix for alpha update
     H_slr <- splr(sparse, low_rankC, low_rankD)
     
-    #Updating alpha and beta
+    # Updating alpha and beta
     newalpha <- rowMeans(H_slr)
     
-    #Subtract the rowmean from H for the update for beta
+    # Subtract the rowmean from H for the update for beta
     low_rankC <- cbind(C, (alpha - newalpha), rep(1, nu))
     H_slr_rowmean <- splr(sparse, low_rankC, low_rankD)
     newbeta <- colMeans(H_slr_rowmean)
     
-    #Updating the C and D
-    #Remove row and column mean from H
+    # Updating the C and D
+    # Remove row and column mean from H
     low_rankD <- cbind(D, rep(1, ni), (beta - newbeta))
     H_slr_rowandcolmean <-splr(sparse, low_rankC, low_rankD)
     
-    #Retrieve C and D from the svd.als function
+    # Retrieve C and D from the svd.als function
     results <- svd.als(H_slr_rowandcolmean, rank.max = factors, lambda = lambda / 2)
     
     # Updates
@@ -423,8 +430,8 @@ getPredict <- function(df, alpha, beta, C, D){
   maxU <- nrow(C)
   maxI <- nrow(D)
   
-  # Marking offer/items that are non existent in the training set
-  df$nonMiss <- ((df[ ,"USERID_ind"]  <= maxU) & (df[ ,"OFFERID_ind"] <= maxI))
+  # Marking offer/items that are in the training set and do not have a prediction yet
+  df$nonMiss <- (df[ ,"USERID_ind"]  <= maxU & df[ ,"OFFERID_ind"] <= maxI & is.na(df[ ,"prediction"]))
   
   # Predciting for the non missing obs
   # Get the non missing indices
