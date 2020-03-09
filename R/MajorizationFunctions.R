@@ -65,14 +65,14 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
   names(df)[1:5] <- c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")
   
   df$train_test <- rep(NA, nrow(df))
-  # Make the test train split (test is 1)
+  
+  # Make the test train split (test set has value 1)
   if (cv){
-    # In case of cross validation (recode to zeroes and ones for ease)
+    # In case of cross validation (folds are known beforehand)
     df$train_test <- 0
     df$train_test[ind == fold] <- 1
   }
   else {
-    # In case of a random draws
     df$train_test <- rbinom(n = nrow(df), size = 1, prob = 0.2)
   }
   
@@ -80,31 +80,35 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
   df <- df %>% group_by(USERID_ind) %>% mutate(ratioU_new = sum((!as.logical(train_test))*CLICK)/sum(!as.logical(train_test))) %>% ungroup()
   df <- df %>% group_by(OFFERID_ind) %>% mutate(ratioO_new = sum((!as.logical(train_test))*CLICK)/sum(!as.logical(train_test))) %>% ungroup()
   
-  # Pre-allocate column for predictions
   df$prediction <- rep(NA, nrow(df))
   
-  # Deleting the rows/columns without variation
+  # Predict zeroes for users with mean zero, and remove them from the training set
   if (onlyVar) {
     
     # Split dataframe (temporarily)
-    df_test <- df[as.logical(df$train_test), ]
-    df_train <- df[!(as.logical(df$train_test)), ]
-    
+    # df_test <- df[as.logical(df$train_test), ]
+    # df_train <- df[!(as.logical(df$train_test)), ]
+
     # Assign the 0 or 1 to test set obs where a ratio is 0 or 1 (prediction in advance)
     # df_test$prediction[(df_test$ratioU_new == 0 | df_test$ratioO_new == 0)] <- 0
     # df_test$prediction[(df_test$ratioU_new == 1 | df_test$ratioO_new == 1)] <- 1
-    df_test$prediction[(df_test$ratioU_new == 0)] <- 0
-    
+    # df_test$prediction[df_test$ratioU_new == 0] <- 0
+
     # Drop the train obs where a ratio is 0 or 1
-    # df_train <- df_train[!(df_train$ratioU_new == 0 | df_train$ratioO_new == 0 | 
+    # df_train <- df_train[!(df_train$ratioU_new == 0 | df_train$ratioO_new == 0 |
     #                          df_train$ratioU_new == 1 | df_train$ratioO_new == 1), ]
-    
-    # Drop the train obs where the user mean is 0 or 1
-    # df_train <- df_train[!(df_train$ratioU_new == 0 | df_train$ratioU_new == 1), ]
-    df_train <- df_train[!(df_train$ratioU_new == 0), ]
-    
+
+    # Drop the train obs where the user mean is 0
+    # df_train <- df_train[!(df_train$ratioU_new == 0), ]
+
     # Merge the two to make indices
-    df <- rbind(df_train, df_test)
+    # df <- rbind(df_train, df_test)
+    
+    # Set predictions of observations that have user mean zero AND are in the test set to zero
+    df$prediction[df$ratioU_new == 0 & as.logical(df$train_test)] <- 0
+    
+    # Exclude observations that have user mean zero AND are in the training set
+    df <- df[!(df$ratioU_new == 0 & !as.logical(df$train_test)), ]
   }
   
   # Create new indices. Make sure test is at bottom
@@ -119,7 +123,6 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
   df_train <- df[!(as.logical(df$train_test)), c("USERID_ind_new", "OFFERID_ind_new", "CLICK", 
                                                  "ratioU_new", "ratioO_new")]
   
-  # Return
   output <- list("df_train" = df_train, "df_test" = df_test)
   return(output)
 }
