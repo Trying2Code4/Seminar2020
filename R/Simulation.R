@@ -151,9 +151,11 @@ output <- fullAlg(df_train, df_test, factors, lambda, iter, initType, llh,
 
 ### Overwrite simulation ----
 # We can also simply overwrite the test clicks
-df_train$CLICK <- sample(c(0,1), nrow(df_train), replace = TRUE)
+df_test$CLICK <- sample(c(0,1), nrow(df_test), replace = TRUE)
 
 # Getting predictions
 set.seed(0)
 output <- fullAlg(df_train, df_test, factors, lambda, iter, initType, llh, 
                   rmse, epsilon)
+
+mean(output$prediction$CLICK)
