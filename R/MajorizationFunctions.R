@@ -81,13 +81,13 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
   }
   
   # User/offer click rate in train set (if user or offer not in train set, average is set at NaN)
-  df <- df %>% group_by(USERID_ind) %>% mutate(ratioU_new = sum((!as.logical(train_test))*CLICK)/sum(!as.logical(train_test))) %>% ungroup()
-  df <- df %>% group_by(OFFERID_ind) %>% mutate(ratioO_new = sum((!as.logical(train_test))*CLICK)/sum(!as.logical(train_test))) %>% ungroup()
+  df <- df %>% group_by(USERID_ind) %>% mutate(ratioU = sum((!as.logical(train_test))*CLICK)/sum(!as.logical(train_test))) %>% ungroup()
+  df <- df %>% group_by(OFFERID_ind) %>% mutate(ratioO = sum((!as.logical(train_test))*CLICK)/sum(!as.logical(train_test))) %>% ungroup()
   
   df$prediction <- rep(NA, nrow(df))
   
   # Set predictions of observations that have user mean zero AND are in the test set to zero
-  df$prediction[df$ratioU_new == 0 & as.logical(df$train_test)] <- 0
+  df$prediction[df$ratioU == 0 & as.logical(df$train_test)] <- 0
   
   # Predict zeroes for users with mean zero, and remove them from the training set
   if (onlyVar) {
@@ -112,7 +112,7 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
     # df <- rbind(df_train, df_test)
     
     # Exclude observations that have user mean zero AND are in the training set
-    df <- df[!(df$ratioU_new == 0 & !as.logical(df$train_test)), ]
+    df <- df[!(df$ratioU == 0 & !as.logical(df$train_test)), ]
   }
   
   # Create new indices. Make sure test is at bottom
@@ -125,7 +125,7 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
   # Split sets
   df_test <- df[as.logical(df$train_test), ]
   df_train <- df[!(as.logical(df$train_test)), c("USERID_ind_new", "OFFERID_ind_new", "CLICK", 
-                                                 "ratioU_new", "ratioO_new")]
+                                                 "ratioU", "ratioO")]
   
   output <- list("df_train" = df_train, "df_test" = df_test)
   return(output)
@@ -305,7 +305,19 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
   factors_all <- rep(NA, (iter+1))
   factors_all[run] <- factors
   
+  # Keeping track of parameters
+  alpha_track <- alpha
+  beta_track <- beta
+  C_track <- C
+  D_track <- D
+  
   while (run <= iter) {
+    # Keeping track of parameters
+    alpha_track <- cbind(alpha_track, alpha)
+    beta_track <- cbind(beta_track, beta)
+    C_track <- cbind(C_track, C)
+    D_track <- cbind(D_track, D)
+    
     # tic(paste("Complete iteration", run, sep = " "))
     # Define low rank representation of gamma0
     low_rankC <- cbind(C, alpha, rep(1, nu))
@@ -408,8 +420,13 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     
   }
   
+  # Keeping track
+  par_track <- list("alpha_track" = alpha_track, "beta_track" = beta_track, 
+                    "C_track" = C_track, "D_track" = D_track)
+  
   output <- list("alpha" = alpha, "beta" = beta, "C" = C, "D" = D, "objective" = objective_all, 
-                 "deviance" = deviance_all, "rmse" = rmse_it, "run" = run, "factors" = factors_all)
+                 "deviance" = deviance_all, "rmse" = rmse_it, "run" = run, "factors" = factors_all,
+                 "par_track" = par_track)
   return(output)
 }
 
