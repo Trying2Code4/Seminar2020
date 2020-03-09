@@ -170,14 +170,26 @@ initChoose <- function(df, factors, lambda, initType, a_in = NULL, b_in = NULL,
       select(meanCLICK)
     
     # Give some value when this is 0 or 1 (otherwise gamma -> inf)
-    user_avg[user_avg == 0] <- 0.01 # THINK ABOUT THIS
-    user_avg[user_avg == 1] <- 0.99 
+    user_avg[user_avg == 0] <- 0.00001 # THINK ABOUT THIS
+    user_avg[user_avg == 1] <- 0.99999
     
     # Calculate the gamma's that produce these click rates
     alpha <- as.matrix(-1 * log(1/user_avg - 1))
     
+    #Make offer click averages
+    offer_avg <- df %>%
+      group_by(OFFERID_ind) %>%
+      summarize(meanCLICK = mean(CLICK)) %>%
+      select(meanCLICK)
+    
+    # Give some value when this is 0 or 1 (otherwise gamma -> inf)
+    offer_avg[offer_avg == 0] <- 0.00001 # THINK ABOUT THIS
+    offer_avg[offer_avg == 1] <- 0.99999
+    
+    # Calculate the gamma's that produce these click rates
+    beta <- as.matrix(-1 * log(1/offer_avg - 1))
+    
     # Simple zero means for the other parameters
-    beta <- rep(0, ni)
     C <- matrix(rnorm(nu * factors, 0, 1/lambda), nu, factors)
     D <- matrix(rnorm(ni * factors, 0, 1/lambda), ni, factors)
   }
