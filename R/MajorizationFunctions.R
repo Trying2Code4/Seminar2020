@@ -76,17 +76,9 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
     df$train_test <- rbinom(n = nrow(df), size = 1, prob = 0.2)
   }
   
-  # Sum of clicks in train set (per user/offer)
-  df <- df %>% group_by(USERID_ind) %>% mutate(sum_click_user = sum((!as.logical(train_test))*CLICK)) %>% ungroup()
-  df <- df %>% group_by(OFFERID_ind) %>% mutate(sum_click_offer = sum((!as.logical(train_test))*CLICK)) %>% ungroup()
-  
-  # Number of observations in train set (per user/offer)
-  df <- df %>% group_by(USERID_ind) %>% mutate(count_user = sum(!as.logical(train_test))) %>% ungroup()
-  df <- df %>% group_by(OFFERID_ind) %>% mutate(count_offer = sum(!as.logical(train_test))) %>% ungroup()
-  
   # User/offer click rate in train set (if user or offer not in train set, average is set at NaN)
-  df$ratioU_new <- df$sum_click_user/df$count_user
-  df$ratioO_new <- df$sum_click_offer/df$count_offer
+  df <- df %>% group_by(USERID_ind) %>% mutate(ratioU_new = sum((!as.logical(train_test))*CLICK)/sum(!as.logical(train_test))) %>% ungroup()
+  df <- df %>% group_by(OFFERID_ind) %>% mutate(ratioO_new = sum((!as.logical(train_test))*CLICK)/sum(!as.logical(train_test))) %>% ungroup()
   
   # Pre-allocate column for predictions
   df$prediction <- rep(NA, nrow(df))
@@ -99,15 +91,17 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
     df_train <- df[!(as.logical(df$train_test)), ]
     
     # Assign the 0 or 1 to test set obs where a ratio is 0 or 1 (prediction in advance)
-    df_test$prediction[(df_test$ratioU_new == 0 | df_test$ratioO_new == 0)] <- 0
+    # df_test$prediction[(df_test$ratioU_new == 0 | df_test$ratioO_new == 0)] <- 0
     # df_test$prediction[(df_test$ratioU_new == 1 | df_test$ratioO_new == 1)] <- 1
+    df_test$prediction[(df_test$ratioU_new == 0)] <- 0
     
     # Drop the train obs where a ratio is 0 or 1
     # df_train <- df_train[!(df_train$ratioU_new == 0 | df_train$ratioO_new == 0 | 
     #                          df_train$ratioU_new == 1 | df_train$ratioO_new == 1), ]
     
     # Drop the train obs where the user mean is 0 or 1
-    df_train <- df_train[!(df_train$ratioU_new == 0 | df_train$ratioU_new == 1), ]
+    # df_train <- df_train[!(df_train$ratioU_new == 0 | df_train$ratioU_new == 1), ]
+    df_train <- df_train[!(df_train$ratioU_new == 0), ]
     
     # Merge the two to make indices
     df <- rbind(df_train, df_test)
@@ -317,16 +311,16 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     H_slr <- splr(sparse, low_rankC, low_rankD)
     
     #Updating alpha and beta
-    newalpha <- as.matrix((1/ni) * H_slr %*% rep(1, ni))
+    newalpha <- rowMeans(H_slr)
     
     #Subtract the rowmean from H for the update for beta
-    low_rankC <- cbind(C, (alpha - rowMeans(H_slr)), rep(1, nu))
+    low_rankC <- cbind(C, (alpha - newalpha), rep(1, nu))
     H_slr_rowmean <- splr(sparse, low_rankC, low_rankD)
-    newbeta <- as.matrix((1/nu) * t(t(rep(1, nu)) %*% H_slr_rowmean))
+    newbeta <- colMeans(H_slr_rowmean)
     
     #Updating the C and D
     #Remove row and column mean from H
-    low_rankD <- cbind(D, rep(1, ni), (beta - colMeans(H_slr_rowmean)))
+    low_rankD <- cbind(D, rep(1, ni), (beta - newbeta))
     H_slr_rowandcolmean <-splr(sparse, low_rankC, low_rankD)
     
     #Retrieve C and D from the svd.als function
@@ -382,18 +376,14 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     
     if (!is.null(epsilon)) {
       if (!is.infinite(objective_new) && !is.infinite(objective_old)) {
-        print(paste("Iter", run-1, "Change in deviance is", (deviance_new-deviance_old)/deviance_old, sep=" "))
+        print(paste("Iter", (run-1), "Change in deviance is", (deviance_new-deviance_old)/deviance_old, sep=" "))
         print((objective_new-objective_old)/objective_old)
         if (abs((objective_new-objective_old)/objective_old) < epsilon) break
       }
     }
     
     # Keeping track of the number of factors
-    if (factors == 1){
-      factors_all[run] <- sum(results$d > 0 )
-    } else{
-      factors_all[run] <- sum(diag(results$d) > 0)
-    }
+    factors_all[run] <- sum(results$d > 0)
     
   }
   
