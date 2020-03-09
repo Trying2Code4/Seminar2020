@@ -66,7 +66,7 @@ mu <- function(x){
 #' 
 trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
   # Formatting
-  names(df)[1:5] <- c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")
+  names(df)[1:3] <- c("USERID_ind", "OFFERID_ind", "CLICK")
   
   df$train_test <- rep(NA, nrow(df))
   
@@ -242,8 +242,7 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
   names(df)[1:3] <- c("USERID_ind", "OFFERID_ind", "CLICK")
   
   # Initialization (including centering)
-  initPars <- initChoose(df, factors, lambda, initType, a_in, b_in, C_in, 
-                         D_in)
+  initPars <- initChoose(df, factors, lambda, initType, a_in, b_in, C_in, D_in)
   
   alpha <- initPars$alpha
   beta <- initPars$beta
@@ -326,7 +325,7 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     df01 <- rbind(df1, df0)
     
     # Create sparse matrix
-    sparse <- sparseMatrix(i = (df01[ ,"USERID_ind"]), j = (df01[ ,"OFFERID_ind"]),
+    sparse <- sparseMatrix(i = df01[ ,"USERID_ind"], j = df01[ ,"OFFERID_ind"],
                            x = df01[ ,"deriv"], dims = c(nu, ni))
     
     # Calculating the H matrix for alpha update
@@ -343,7 +342,7 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     # Updating the C and D
     # Remove row and column mean from H
     low_rankD <- cbind(D, rep(1, ni), (beta - newbeta))
-    H_slr_rowandcolmean <-splr(sparse, low_rankC, low_rankD)
+    H_slr_rowandcolmean <- splr(sparse, low_rankC, low_rankD)
     
     # Retrieve C and D from the svd.als function
     results <- svd.als(H_slr_rowandcolmean, rank.max = factors, lambda = lambda / 2)

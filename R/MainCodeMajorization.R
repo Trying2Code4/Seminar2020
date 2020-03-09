@@ -1,12 +1,13 @@
-library(dplyr)
-library(readr)
 library(softImpute)
 library(tidyverse)
 library(tictoc)
 library(RcppArmadillo)
 library(Rcpp)
-library(ggplot2)
 library(openxlsx)
+
+# library(dplyr)
+# library(readr)
+# library(ggplot2)
 
 # sourceCpp("/Users/colinhuliselan/Documents/Master/Seminar/Seminar2020_V2/R/gammaui.cpp")
 #sourceCpp("~/Dropbox/Uni/Master_Econometrie/Blok_3/Seminar2020/R/gammaui.cpp")
@@ -72,69 +73,38 @@ saveRDS(df_test, "/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/d
 # saveRDS(df_test, "~/Google Drive/Seminar 2020/Data/df_test")
 
 
-# Train/test pred. -----------------------------------------------------------------
-# Makes predictions for a train/test split for the FULL training set
-# Also, includes columns/rows with only 0 or 1
-
-# Use "Preparing data" first to get the df_train object
-#df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
-df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
-df <- df[ ,c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")]
-
-# Setting parameters
-factors <- 2
-lambda <- 1
-iter <- 100
-initType <- 4
-onlyVar <- TRUE
-llh <- TRUE
-rmse <- TRUE
-epsilon <- 0.01
-
-set.seed(50)
-split <- trainTest(df, onlyVar)
-df_train <- split$df_train[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
-df_test <- split$df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU", "ratioO", "prediction")]
-rm("split")
-
-output <- fullAlg(df_train, df_test, factors, lambda, iter, initType, llh, rmse, 
-                  epsilon)
-
-baseline <- baselinePred(df_train, df_test)
-
-# Visualization
-hist(output$prediction$prediction)
-plot(output$parameters$logllh)
-
 # Train/test pred. SUB --------------------------------------------------------------
 # Makes predictions for a train/test split for A SUBSET of the training set
 # Also, includes columns/rows with only 0 or 1
 
 # Use "Preparing data" first to get the df_train object
 df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
-df <- df[df$USERID_ind < 10000, c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")]
+df <- df[, c("USERID_ind", "OFFERID_ind", "CLICK")]
+
+# If we want to use subset:
+df <- df[df$USERID_ind < 10000,]
 
 # Setting parameters
 factors <- 20
-lambda <- 20
+lambda <- 75
 iter <- 1000
 initType <- 2
-onlyVar <- TRUE
+onlyVar <- T
 llh <- TRUE
 rmse <- TRUE
-epsilon <- 0.0001
+epsilon <- 0.00001
 
 set.seed(50)
 split <- trainTest(df, onlyVar)
 df_train <- split$df_train[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
-df_test <- split$df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU", "ratioO", "prediction")]
+df_test <- split$df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU_new", "ratioO_new", "prediction")]
 rm("split")
 
 set.seed(0)
 output <- fullAlg(df_train, df_test, factors, lambda, iter, initType, llh, 
                   rmse, epsilon)
 
-baseline <- baselinePred(df_train2, df_test2)
+baseline <- baselinePred(df_train, df_test)
 
 
 # Visualization
@@ -143,13 +113,13 @@ hist(output2$prediction$prediction)
 
 par(mfrow=c(2,2))
 plot(output$parameters$objective[1:sum(!is.na(output$parameters$objective))],
-     col="blue", type = "l", ylab="Objective Function", xlab="Iteration")
+     col="blue", type = "l", lwd=2, ylab="Objective Function", xlab="Iteration")
 plot(output$parameters$deviance[1:sum(!is.na(output$parameters$deviance))],
-     col="green", type = "l", ylab="Deviance", xlab="Iteration")
+     col="green", type = "l", lwd=2, ylab="Deviance", xlab="Iteration")
 plot(output$parameters$rmse[1:sum(!is.na(output$parameters$rmse))],
-     col="red", type = "l", ylab="RMSE", xlab="Iteration")
+     col="red", type = "l", lwd=2, ylab="RMSE", xlab="Iteration")
 plot(output$parameters$factors[1:sum(!is.na(output$parameters$factors))],
-     col="orange", type = "l", ylab="Number of factors", xlab="Iteration")
+     col="orange", type = "l", lwd=2, ylab="Number of factors", xlab="Iteration")
 par(mfrow=c(1,1))
 
 # Cross validation -----------------------------------------------------------------------
@@ -157,7 +127,7 @@ par(mfrow=c(1,1))
 # Make sure the names are correct
 # df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
 df <- readRDS("df_train")
-df <- df[df$USERID_ind < 10000, c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO")]
+df <- df[df$USERID_ind < 10000, c("USERID_ind", "OFFERID_ind", "CLICK")]
 
 # Input whichever hyperparameters you want to test
 FACTORS <- c(50)
