@@ -335,7 +335,7 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     H_slr_rowandcolmean <- splr(sparse, low_rankC, low_rankD)
     
     # Retrieve C and D from the svd.als function
-    results <- svd.als(H_slr_rowandcolmean, rank.max = factors, lambda = lambda / 2)
+    results <- svd.als(H_slr_rowandcolmean, rank.max = factors, lambda = lambda * 4)
     
     # Updates
     alpha <- newalpha
