@@ -78,33 +78,43 @@ saveRDS(df_test, "/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/d
 # Also, includes columns/rows with only 0 or 1
 
 # Use "Preparing data" first to get the df_train object
-df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
+df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/SharedData/df_train.RDS")
 df <- df[, c("USERID_ind", "OFFERID_ind", "CLICK")]
 
 # If we want to use subset:
-df <- df[df$USERID_ind < 10000,]
+df <- df[df$USERID_ind < 10000, ]
 
+mean(df$CLICK)
+mean(df_test$CLICK)
 # Setting parameters
-factors <- 20
-lambda <- 75
-iter <- 1000
+factors <- 3
+lambda <- 5
+iter <- 30
 initType <- 2
 onlyVar <- T
-llh <- TRUE
-rmse <- TRUE
-epsilon <- 0.00001
+llh <- FALSE
+rmse <- FALSE
+epsilon <- 0.00000001
+
+df_train <- df
+
+
+
+check <- parEst(df_train, factors, lambda, iter, initType, llh, rmse)
 
 set.seed(50)
 split <- trainTest(df, onlyVar)
 df_train <- split$df_train[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
-df_test <- split$df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU_new", "ratioO_new", "prediction")]
+df_test <- split$df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU", "ratioO", "prediction")]
+globalMean <- split$globalMean
 rm("split")
 
 set.seed(0)
 output <- fullAlg(df_train, df_test, factors, lambda, iter, initType, llh, 
-                  rmse, epsilon)
+                  rmse, epsilon, globalMean = globalMean)
 
-baseline <- baselinePred(df_train, df_test)
+baseline <- baselinePred(df_test, globalMean=globalMean)
+debug(baselinePred)
 
 
 # Visualization
@@ -152,6 +162,32 @@ p <- ggplot(CVoutput, aes(x=Specification, y=RMSE)) +
 p
   
 CVoutput$RMSE
+
+# Fitting on a set -----------------------------------------------------------------------
+df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/SharedData/df_train.RDS")
+df <- df[, c("USERID_ind", "OFFERID_ind", "CLICK")]
+
+# Setting parameters
+factors <- 3
+lambda <- 5
+iter <- 30
+initType <- 2
+onlyVar <- T
+llh <- FALSE
+rmse <- FALSE
+epsilon <- 0.00000001
+
+# Make correct indices
+df <- df %>% 
+  mutate(USERID_ind_new = group_indices(., factor(USERID_ind, levels = unique(USERID_ind))))
+df <- df %>% 
+  mutate(OFFERID_ind_new = group_indices(., factor(OFFERID_ind, levels = unique(OFFERID_ind))))
+df <- df[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
+
+tic("Total time to fit")
+check <- parEst(df, factors, lambda, iter, initType, llh, rmse)
+toc()
+
 
 # Final predictions ----------------------------------------------------------------------
 # If you want predictions for the final set
@@ -235,7 +271,6 @@ df_train <- df_obs[(df_obs$val == 0 & !is.na(df_obs$val)), ]
 # Check if you want
 nrow(df_res) + nrow(df_val) + nrow(df_train) - nrow(df_obs)
 
-
 # Save everything
 saveRDS(df_game, "/Users/colinhuliselan/Documents/Master/Seminar/SharedData/df_game")
 write.csv(df_game, file = "df_game.csv")
@@ -245,7 +280,7 @@ saveRDS(df_res, "/Users/colinhuliselan/Documents/Master/Seminar/SharedData/df_re
 write.csv(df_res, file = "df_res.csv")
 saveRDS(df_val, "/Users/colinhuliselan/Documents/Master/Seminar/SharedData/df_val")
 write.csv(df_val, file = "df_val.csv")
-saveRDS(df_train, "/Users/colinhuliselan/Documents/Master/Seminar/SharedData/df_train")
+saveRDS(df_train, "/Users/colinhuliselan/Documents/Master/Seminar/Shared_Data/df_train")
 write.csv(df_train, file = "df_train.csv")
 
 
