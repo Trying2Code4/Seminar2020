@@ -56,62 +56,33 @@ mu <- function(x){
 
 #' Create a train/test split, given a training set
 #'
-#' @param df df containing indices, click, and "ratio" columns (see "Preparing data")
-#' @param onlyVar boolean specifying whether rows/columns without variation should be removed
+#' @param df df containing indices and clicks
+#' @param onlyVar boolean specifying whether rows without variation should be removed
 #' @param cv indicates whether train test split is made for CV
 #' @param ind vector with fold indices in case of CV
 #' @param fold fold that should currently be the test set
+#' @param test_size fraction of data that should be included in the test split, ignored if cv != NULL
 #'
-#' @return training set and corresponding test set
+#' @return training set, corresponding test set, and global mean click rate of training set
 #' 
-trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
+trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL, test_size = 0.2){
   # Formatting
-  names(df)[1:3] <- c("USERID_ind", "OFFERID_ind", "CLICK")
-  
-  df$train_test <- rep(NA, nrow(df))
+  original <- names(df)
+  names(df)[1:3] <- c("USERID", "OFFERID", "CLICK")
   
   # Make the test train split (test set has value 1)
-  if (cv){
+  if (cv) {
     # In case of cross validation (folds are known beforehand)
     df$train_test <- 0
     df$train_test[ind == fold] <- 1
   }
   else {
-    df$train_test <- rbinom(n = nrow(df), size = 1, prob = 0.2)
+    df$train_test <- rbinom(n = nrow(df), size = 1, prob = test_size)
   }
   
-  # Take the mean click rate of the training set (without deleting zero rows)
-  globalMean <- mean(df[df$train_test==0, ]$CLICK)
-  
-  # User/offer click rate in train set (if user or offer not in train set, average is set at NaN)
-  df <- df %>% group_by(USERID_ind) %>% mutate(ratioU = sum((!as.logical(train_test))*CLICK)/sum(!as.logical(train_test))) %>% ungroup()
-  df <- df %>% group_by(OFFERID_ind) %>% mutate(ratioO = sum((!as.logical(train_test))*CLICK)/sum(!as.logical(train_test))) %>% ungroup()
-
-  # Set predictions of observations that have user mean zero AND are in the test set to zero
-  df$prediction <- rep(NA, nrow(df))
-  df$prediction[df$ratioU == 0 & as.logical(df$train_test)] <- 0
-  
-  if (onlyVar) {
-    # Exclude observations that have user mean zero AND are in the training set
-    df <- df[!(df$ratioU == 0 & !as.logical(df$train_test)), ]
-  }
-  
-  # Create new indices. Make sure test is at bottom
-  df <- df[order(df$train_test), ]
-  df <- df %>% 
-    mutate(USERID_ind_new = group_indices(., factor(USERID_ind, levels = unique(USERID_ind))))
-  df <- df %>% 
-    mutate(OFFERID_ind_new = group_indices(., factor(OFFERID_ind, levels = unique(OFFERID_ind))))
-  
-  # Split sets
-  df_test <- df[as.logical(df$train_test), ]
-  df_train <- df[!(as.logical(df$train_test)), c("USERID_ind_new", "OFFERID_ind_new", "CLICK", 
-                                                 "ratioU", "ratioO")]
-  
-  output <- list("df_train" = df_train, "df_test" = df_test, "globalMean" = globalMean)
-  return(output)
+  names(df) <- c(original, "train_test")
+  return(prepData(df[!as.logical(df$train_test), ], df[as.logical(df$train_test), ], onlyVar))
 }
-
 
 #' Gives initial estimates for alpha, beta, C and D
 #'
@@ -230,11 +201,10 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
   C <- initPars$C
   D <- initPars$D
   
-  # Because Thijs' code uses matrix
   df <- as.matrix(df)
   
-  nu <- max(df[,"USERID_ind"])
-  ni <- max(df[,"OFFERID_ind"])
+  nu <- max(df[, "USERID_ind"])
+  ni <- max(df[, "OFFERID_ind"])
   
   #Retrieve indices for y=1 and y=0 from the input data
   y1 <- df[which(df[ ,"CLICK"] == 1), c("USERID_ind", "OFFERID_ind")]
@@ -401,6 +371,10 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     
   }
   
+  if (!llh && !is.null(epsilon)) {
+    deviance_all = deviance_new
+    objective_all = objective_new
+  }
   # Keeping track
   par_track <- list("alpha_track" = alpha_track, "beta_track" = beta_track, 
                     "C_track" = C_track, "D_track" = D_track)
@@ -473,8 +447,8 @@ fullAlg <- function(df_train, df_test, factors, lambda, iter, initType, llh=FALS
   
   # Getting predictions
   tic("3. Getting predictions")
-  results <- getPredict(df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK",
-                                    "ratioU", "ratioO", "prediction")], 
+  results <- getPredict(df_test[ ,c("USERID_ind", "OFFERID_ind", "CLICK",
+                                    "ratioU", "ratioO", "prediction", "USERID", "OFFERID")], 
                         pars$alpha, pars$beta, pars$C, pars$D)
   toc()
   
@@ -497,7 +471,11 @@ fullAlg <- function(df_train, df_test, factors, lambda, iter, initType, llh=FALS
   confusion <- list("TP" = TP, "TN" = TN, "FP" = FP, "FN" = FN)
   
   # Output
-  output <- list("parameters" = pars, "prediction" = results, "RMSE" = RMSE, 
+  output <- list("parameters" = pars,
+                 "prediction" = results[, c("USERID", "OFFERID","USERID_ind", "OFFERID_ind",
+                                            "CLICK", "prediction", "predictionBin", "ratioU",
+                                            "ratioO")], 
+                 "RMSE" = RMSE,
                  "confusion" = confusion)
   return(output)
 }
@@ -656,7 +634,7 @@ baselinePred <- function(df_test, globalMean){
   return(output)
 }
 
-prepData <- function(dt_train, df_test, onlyVar){
+prepData <- function(df_train, df_test, onlyVar){
   # Record the global mean
   globalMean <- mean(df_train$CLICK)
   
@@ -684,14 +662,15 @@ prepData <- function(dt_train, df_test, onlyVar){
   # Create new indices. Make sure test is at bottom
   df <- df[order(df$train_test), ]
   df <- df %>% 
-    mutate(USERID_ind_new = group_indices(., factor(USERID, levels = unique(USERID))))
+    mutate(USERID_ind = group_indices(., factor(USERID, levels = unique(USERID))))
   df <- df %>% 
-    mutate(OFFERID_ind_new = group_indices(., factor(OFFERID, levels = unique(OFFERID))))
+    mutate(OFFERID_ind = group_indices(., factor(OFFERID, levels = unique(OFFERID))))
   
   # Split sets
-  df_test <- df[as.logical(df$train_test), c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU", 
-                                             "ratioO", "prediction")]
-  df_train <- df[!(as.logical(df$train_test)), c("USERID_ind_new", "OFFERID_ind_new", "CLICK", 
+  df_test <- df[as.logical(df$train_test), c("USERID", "OFFERID", "USERID_ind", 
+                                             "OFFERID_ind", "CLICK", "ratioU", "ratioO", 
+                                             "prediction")]
+  df_train <- df[!(as.logical(df$train_test)), c("USERID_ind", "OFFERID_ind", "CLICK", 
                                                  "ratioU", "ratioO")]
   
   output <- list("df_train" = df_train, "df_test" = df_test, "globalMean" = globalMean)

@@ -79,36 +79,39 @@ saveRDS(df_test, "/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/d
 
 # Use "Preparing data" first to get the df_train object
 df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
-df <- df[, c("USERID_ind", "OFFERID_ind", "CLICK")]
+# df <- df[, c("USERID_ind", "OFFERID_ind", "CLICK")]
 
 # If we want to use subset:
 df <- df[df$USERID_ind < 10000,]
+df <- df[, c("USERID", "OFFERID", "CLICK")]
+
 
 # Setting parameters
 factors <- 20
-lambda <- 75
+lambda <- 20
 iter <- 1000
 initType <- 2
 onlyVar <- T
 llh <- TRUE
 rmse <- TRUE
-epsilon <- 0.00001
+epsilon <- 0.001
 
 set.seed(50)
 split <- trainTest(df, onlyVar)
-df_train <- split$df_train[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
-df_test <- split$df_test[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU_new", "ratioO_new", "prediction")]
+df_train <- split$df_train[ ,c("USERID_ind", "OFFERID_ind", "CLICK")]
+df_test <- split$df_test[ ,c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO", "prediction", "USERID", "OFFERID")]
+globalMean <- split$globalMean
 rm("split")
 
 set.seed(0)
 output <- fullAlg(df_train, df_test, factors, lambda, iter, initType, llh, 
-                  rmse, epsilon)
+                  rmse, epsilon, globalMean=globalMean)
 
 baseline <- baselinePred(df_train, df_test)
 
 
 # Visualization
-hist(output2$prediction$prediction)
+hist(output$prediction$prediction)
 # xdata <- c(1:output$parameters$run)
 
 par(mfrow=c(2,2))
