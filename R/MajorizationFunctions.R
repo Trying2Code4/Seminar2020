@@ -80,6 +80,9 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
     df$train_test <- rbinom(n = nrow(df), size = 1, prob = 0.2)
   }
   
+  # Take the mean click rate of the training set (without deleting zero rows)
+  globalMean <- mean(df[df$train_test==0, ]$CLICK)
+  
   # User/offer click rate in train set (if user or offer not in train set, average is set at NaN)
   df <- df %>% group_by(USERID_ind) %>% mutate(ratioU = sum((!as.logical(train_test))*CLICK)/sum(!as.logical(train_test))) %>% ungroup()
   df <- df %>% group_by(OFFERID_ind) %>% mutate(ratioO = sum((!as.logical(train_test))*CLICK)/sum(!as.logical(train_test))) %>% ungroup()
@@ -105,7 +108,7 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL){
   df_train <- df[!(as.logical(df$train_test)), c("USERID_ind_new", "OFFERID_ind_new", "CLICK", 
                                                  "ratioU", "ratioO")]
   
-  output <- list("df_train" = df_train, "df_test" = df_test)
+  output <- list("df_train" = df_train, "df_test" = df_test, "globalMean" = globalMean)
   return(output)
 }
 
@@ -460,7 +463,8 @@ getPredict <- function(df, alpha, beta, C, D){
 #' @return parameters, predictions, and performance measures
 #'
 fullAlg <- function(df_train, df_test, factors, lambda, iter, initType, llh=FALSE, 
-                    rmse=FALSE, epsilon=NULL, a_in = NULL, b_in = NULL, C_in = NULL, D_in = NULL){
+                    rmse=FALSE, epsilon=NULL, a_in = NULL, b_in = NULL, C_in = NULL, D_in = NULL,
+                    globalMean){
   # Estimating parameters
   tic("2. Estimating parameters")
   pars <- parEst(df_train, factors, lambda, iter, initType, llh, rmse, df_test, 
@@ -475,8 +479,8 @@ fullAlg <- function(df_train, df_test, factors, lambda, iter, initType, llh=FALS
   toc()
   
   # RMSE
-  # What to do with the NANs (some majority rule)
-  results$prediction[is.na(results$prediction)] <- 0
+  # What to do with the NANs (global mean)
+  results$prediction[is.na(results$prediction)] <- globalMean
   RMSE <- sqrt(mean((results$prediction - results$CLICK)^2))
   
   # Calculate confusion matrix
@@ -550,6 +554,7 @@ crossValidate <- function(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter,
       split <- trainTest(df, onlyVar, cv = TRUE, ind = foldInd, fold = z)
       df_train <-split$df_train[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
       df_test <- split$df_test
+      globalMean <- split$globalMean
       
       # Loop the other hyperparameters
       
@@ -568,7 +573,8 @@ crossValidate <- function(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter,
             
             # Run the algorithm
             output <- fullAlg(df_train, df_test, factors, lambda, iter, initType, 
-                              epsilon = epsilon, a_in=a_in, b_in=b_in, C_in=C_in, D_in=D_in)
+                              epsilon = epsilon, a_in=a_in, b_in=b_in, C_in=C_in, D_in=D_in,
+                              globalMean=globalMean)
             
             # Fill the array with output
             CVoutput$Factor[row] <- factors
@@ -626,16 +632,16 @@ crossValidate <- function(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter,
 #'
 #' @return RMSE of baseline predictions
 #' 
-baselinePred <- function(df_train, df_test){
+baselinePred <- function(df_test, globalMean){
   # initialize column with majority
-  df_test$predUser <- 0
-  df_test$predOffer <- 0
-  df_test$predOverall <- mean(df_train$CLICK)
-  df_test$predMajority <- 0
+  df_test$predUser <- globalMean
+  df_test$predOffer <- globalMean
+  df_test$predOverall <- globalMean
+  df_test$predMajority <- globalMean
   
   # Fill in predictions where available
-  df_test$predUser <- df_test$ratioU[!is.na(df_test$ratioU)]
-  df_test$predOffer <- df_test$ratioO[!is.na(df_test$ratioO)]
+  df_test$predUser[!is.na(df_test$ratioU)] <- df_test$ratioU[!is.na(df_test$ratioU)]
+  df_test$predOffer[!is.na(df_test$ratioO)] <- df_test$ratioO[!is.na(df_test$ratioO)]
   
   rmseUser <- sqrt(mean((df_test$predUser - df_test$CLICK)^2))
   rmseOffer <- sqrt(mean((df_test$predOffer - df_test$CLICK)^2))
@@ -647,5 +653,47 @@ baselinePred <- function(df_train, df_test){
                  "rmseOverall" = rmseOverall, "rmseMajority" = rmseMajority,
                  "rmseComb" = rmseComb)
   
+  return(output)
+}
+
+prepData <- function(dt_train, df_test, onlyVar){
+  # Record the global mean
+  globalMean <- mean(df_train$CLICK)
+  
+  # Prepare data for merging
+  df_test$train_test <- 1
+  df_train$train_test <- 0
+  df <- rbind(df_train, df_test)
+  
+  # Use the train test function
+  # User/offer click rate in train set (if user or offer not in train set, average is set at NaN)
+  df <- df %>% group_by(USERID) %>% mutate(ratioU = sum((!as.logical(train_test))*CLICK)/sum(!as.logical(train_test))) %>% ungroup()
+  df <- df %>% group_by(OFFERID) %>% mutate(ratioO = sum((!as.logical(train_test))*CLICK)/sum(!as.logical(train_test))) %>% ungroup()
+  
+  df$prediction <- rep(NA, nrow(df))
+  
+  # Set predictions of observations that have user mean zero AND are in the test set to zero
+  df$prediction[df$ratioU == 0 & as.logical(df$train_test)] <- 0
+  
+  # Predict zeroes for users with mean zero, and remove them from the training set
+  if (onlyVar) {
+    # Exclude observations that have user mean zero AND are in the training set
+    df <- df[!(df$ratioU == 0 & !as.logical(df$train_test)), ]
+  }
+  
+  # Create new indices. Make sure test is at bottom
+  df <- df[order(df$train_test), ]
+  df <- df %>% 
+    mutate(USERID_ind_new = group_indices(., factor(USERID, levels = unique(USERID))))
+  df <- df %>% 
+    mutate(OFFERID_ind_new = group_indices(., factor(OFFERID, levels = unique(OFFERID))))
+  
+  # Split sets
+  df_test <- df[as.logical(df$train_test), c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU", 
+                                             "ratioO", "prediction")]
+  df_train <- df[!(as.logical(df$train_test)), c("USERID_ind_new", "OFFERID_ind_new", "CLICK", 
+                                                 "ratioU", "ratioO")]
+  
+  output <- list("df_train" = df_train, "df_test" = df_test, "globalMean" = globalMean)
   return(output)
 }
