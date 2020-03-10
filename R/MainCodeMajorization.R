@@ -94,7 +94,7 @@ lambda <- 20
 iter <- 1000
 initType <- 2
 onlyVar <- T
-llh <- TRUE
+llh <- FALSE
 rmse <- TRUE
 epsilon <- 0.001
 
@@ -133,16 +133,18 @@ par(mfrow=c(1,1))
 # Make sure the names are correct
 # df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
 df <- readRDS("df_train")
-df <- df[df$USERID_ind < 10000, c("USERID_ind", "OFFERID_ind", "CLICK")]
+df <- df[df$USERID_ind < 10000, c("USERID", "OFFERID", "CLICK")]
 
 # Input whichever hyperparameters you want to test
-FACTORS <- c(50)
-LAMBDA <- c(1,5,10,25,50,100,250,500,1000,2500,5000,10000)
+# FACTORS <- c(1, 2, 5, 10, 20)
+FACTORS <- c(5)
+# LAMBDA <- c(1000, 500, 250, 200, 100, 75, 50, 25, 10, 5, 2, 1)
+LAMBDA <- c(1000, 500, 250)
 INITTYPE <- c(2)
 ONLYVAR <- c(TRUE, FALSE)
 folds <- 5
 iter <- 1000
-epsilon <- 1e-08
+epsilon <- 1e-04
 warm <- TRUE
 
 CVoutput <- crossValidate(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter, 
@@ -161,7 +163,8 @@ CVoutput$RMSE
 
 # Fitting on a set -----------------------------------------------------------------------
 df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/SharedData/df_train.RDS")
-df <- df[, c("USERID_ind", "OFFERID_ind", "CLICK")]
+# df <- df[, c("USERID_ind", "OFFERID_ind", "CLICK")]
+df <- df[, c("USERID", "OFFERID", "CLICK")]
 
 # Setting parameters
 factors <- 3
@@ -169,21 +172,20 @@ lambda <- 5
 iter <- 30
 initType <- 2
 onlyVar <- T
-llh <- FALSE
+llh <- TRUE
 rmse <- FALSE
 epsilon <- 0.00000001
 
 # Make correct indices
 df <- df %>% 
-  mutate(USERID_ind_new = group_indices(., factor(USERID_ind, levels = unique(USERID_ind))))
+  mutate(USERID_ind = group_indices(., factor(USERID, levels = unique(USERID))))
 df <- df %>% 
-  mutate(OFFERID_ind_new = group_indices(., factor(OFFERID_ind, levels = unique(OFFERID_ind))))
-df <- df[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
+  mutate(OFFERID_ind = group_indices(., factor(OFFERID, levels = unique(OFFERID))))
+df <- df[ ,c("USERID_ind", "OFFERID_ind", "CLICK")]
 
 tic("Total time to fit")
 check <- parEst(df, factors, lambda, iter, initType, llh, rmse)
 toc()
-
 
 # Final predictions ----------------------------------------------------------------------
 # If you want predictions for the final set

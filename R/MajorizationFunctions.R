@@ -257,17 +257,17 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
   factors_all[run] <- factors
   
   # Keeping track of parameters
-  alpha_track <- alpha
-  beta_track <- beta
-  C_track <- C
-  D_track <- D
+  # alpha_track <- alpha
+  # beta_track <- beta
+  # C_track <- C
+  # D_track <- D
   
   while (run <= iter) {
     # Keeping track of parameters
-    alpha_track <- cbind(alpha_track, alpha)
-    beta_track <- cbind(beta_track, beta)
-    C_track <- cbind(C_track, C)
-    D_track <- cbind(D_track, D)
+    # alpha_track <- cbind(alpha_track, alpha)
+    # beta_track <- cbind(beta_track, beta)
+    # C_track <- cbind(C_track, C)
+    # D_track <- cbind(D_track, D)
     
     # tic(paste("Complete iteration", run, sep = " "))
     # Define low rank representation of gamma0
@@ -371,17 +371,20 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     
   }
   
-  if (!llh && !is.null(epsilon)) {
+  if (!(llh) && !is.null(epsilon)) {
     deviance_all = deviance_new
     objective_all = objective_new
   }
   # Keeping track
-  par_track <- list("alpha_track" = alpha_track, "beta_track" = beta_track, 
-                    "C_track" = C_track, "D_track" = D_track)
+  # par_track <- list("alpha_track" = alpha_track, "beta_track" = beta_track, 
+  #                   "C_track" = C_track, "D_track" = D_track)
+  
+  # output <- list("alpha" = alpha, "beta" = beta, "C" = C, "D" = D, "objective" = objective_all, 
+  #                "deviance" = deviance_all, "rmse" = rmse_it, "run" = run, "factors" = factors_all,
+  #                "par_track" = par_track)
   
   output <- list("alpha" = alpha, "beta" = beta, "C" = C, "D" = D, "objective" = objective_all, 
-                 "deviance" = deviance_all, "rmse" = rmse_it, "run" = run, "factors" = factors_all,
-                 "par_track" = par_track)
+                 "deviance" = deviance_all, "rmse" = rmse_it, "run" = run, "factors" = factors_all)
   return(output)
 }
 
@@ -504,12 +507,13 @@ crossValidate <- function(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter,
   
   # Columns for the hyperparameters, plus a name variable, and then all the results you want
   # these are: rmse, TP (true positive(1)), TN, FP, FN, number of iterations, best baseline, epsilon
-  columns <- 14
+  columns <- 15
   
   # Initialize the df (depth is the number of folds)
   CVoutput <- data.frame(matrix(NA, nrow = rows, ncol = columns))
   names(CVoutput) <- c("Factor", "Lambda", "InitType", "OnlyVar", "Epsilon", "Specification",
-                       "RMSE", "TP", "TN", "FP", "FN", "Iter", "rmseUser", "DifferenceRMSE")
+                       "RetainedFactors", "RMSE", "TP", "TN", "FP", "FN", "Iter", "rmseUser", 
+                       "DifferenceRMSE")
   
   # Now we loop
   # First we make the folds
@@ -530,7 +534,7 @@ crossValidate <- function(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter,
       
       # Make the train test split by using the foldInd and fold as input (see trainTest)
       split <- trainTest(df, onlyVar, cv = TRUE, ind = foldInd, fold = z)
-      df_train <-split$df_train[ ,c("USERID_ind_new", "OFFERID_ind_new", "CLICK")]
+      df_train <-split$df_train[ ,c("USERID_ind", "OFFERID_ind", "CLICK")]
       df_test <- split$df_test
       globalMean <- split$globalMean
       
@@ -551,8 +555,8 @@ crossValidate <- function(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter,
             
             # Run the algorithm
             output <- fullAlg(df_train, df_test, factors, lambda, iter, initType, 
-                              epsilon = epsilon, a_in=a_in, b_in=b_in, C_in=C_in, D_in=D_in,
-                              globalMean=globalMean)
+                              epsilon = epsilon, a_in = a_in, b_in = b_in, C_in = C_in, D_in = D_in, 
+                              globalMean = globalMean)
             
             # Fill the array with output
             CVoutput$Factor[row] <- factors
@@ -567,13 +571,14 @@ crossValidate <- function(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter,
                                                  ", warm = ", warm, sep = "")
             
             # Performance variables
+            CVoutput$RetainedFactors[row] <- output$parameters$factors[sum(!is.na(output$parameters$factors))]
             CVoutput$RMSE[row] <- output$RMSE
             CVoutput$TP[row] <- output$confusion$TP
             CVoutput$TN[row] <- output$confusion$TN
             CVoutput$FP[row] <- output$confusion$FP
             CVoutput$FN[row] <- output$confusion$FN
             CVoutput$Iter[row] <- output$parameters$run - 1
-            CVoutput$rmseUser[row] <- baselinePred(df_train, df_test)$rmseUser
+            CVoutput$rmseUser[row] <- baselinePred(df_test, globalMean)$rmseUser
             CVoutput$DifferenceRMSE[row] <- CVoutput$RMSE[row]-CVoutput$rmseUser[row]
             
             row <- row+1
@@ -597,16 +602,17 @@ crossValidate <- function(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter,
   
   # Create a mean table
   CVmean <- CVoutput %>% 
-    group_by(Epsilon, Specification) %>%
-    summarise_all(mean)
+    group_by(Epsilon, Factor, Lambda, OnlyVar, InitType, Specification) %>% 
+    summarise_all(mean) %>% 
+    ungroup()
   
   return(list("CVoutput" = CVoutput, "CVmean" = CVmean))
 }
 
 #' Baseline predictions
 #'
-#' @param df_train training set
 #' @param df_test test set
+#' @param globalMean overall mean of the training data
 #'
 #' @return RMSE of baseline predictions
 #' 
