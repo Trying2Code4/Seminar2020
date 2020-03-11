@@ -1,6 +1,7 @@
 library(softImpute)
 library(tidyverse)
 library(tictoc)
+library(openxlsx)
 
 # FUNCTIONS FOR MAJORIZATION ------------------------------------------------------------------------
 
@@ -499,7 +500,7 @@ fullAlg <- function(df_train, df_test, factors, lambda, iter, initType, llh=FALS
 #' @return performance per combination of hyperparameters
 #'
 crossValidate <- function(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter, 
-                          epsilon, warm){
+                          epsilon, warm, file=NULL){
   
   # Initialize a multidimensional output array
   # Rows are all the possible permutations of the huperparameters * folds
@@ -581,6 +582,10 @@ crossValidate <- function(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter,
             CVoutput$rmseUser[row] <- baselinePred(df_test, globalMean)$rmseUser
             CVoutput$DifferenceRMSE[row] <- CVoutput$RMSE[row]-CVoutput$rmseUser[row]
             
+            if (!is.null(file)) {
+              write.xlsx(CVoutput, file=file, append = TRUE)
+            }
+            
             row <- row+1
             
             # In case of warm starts, keep track of the last parameters
@@ -652,7 +657,7 @@ prepData <- function(df_train, df_test, onlyVar){
   # Use the train test function
   # User/offer click rate in train set (if user or offer not in train set, average is set at NaN)
   df <- df %>% group_by(USERID) %>% mutate(ratioU = sum((!as.logical(train_test))*CLICK)/sum(!as.logical(train_test))) %>% ungroup()
-  df <- df %>% group_by(OFFERID) %>% mutate(ratioO = sum((!as.logical(train_test))*CLICK)/sum(!as.logical(train_test))) %>% ungroup()
+  df <- df %>% group_by(MailOffer) %>% mutate(ratioO = sum((!as.logical(train_test))*CLICK)/sum(!as.logical(train_test))) %>% ungroup()
   
   df$prediction <- rep(NA, nrow(df))
   
@@ -670,10 +675,10 @@ prepData <- function(df_train, df_test, onlyVar){
   df <- df %>% 
     mutate(USERID_ind = group_indices(., factor(USERID, levels = unique(USERID))))
   df <- df %>% 
-    mutate(OFFERID_ind = group_indices(., factor(OFFERID, levels = unique(OFFERID))))
+    mutate(OFFERID_ind = group_indices(., factor(MailOffer, levels = unique(MailOffer))))
   
   # Split sets
-  df_test <- df[as.logical(df$train_test), c("USERID", "OFFERID", "USERID_ind", 
+  df_test <- df[as.logical(df$train_test), c("USERID", "MailOffer", "USERID_ind", 
                                              "OFFERID_ind", "CLICK", "ratioU", "ratioO", 
                                              "prediction")]
   df_train <- df[!(as.logical(df$train_test)), c("USERID_ind", "OFFERID_ind", "CLICK", 
