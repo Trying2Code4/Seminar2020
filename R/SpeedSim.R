@@ -352,8 +352,8 @@ parEstSlow <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=N
     
     tic(paste("Complete iteration", run, sep = " "))
     # Define low rank representation of gamma0
-    # low_rankC <- cbind(C, alpha, rep(1, nu))
-    # low_rankD <- cbind(D, rep(1,ni), beta)
+     low_rankC <- cbind(C, alpha, rep(1, nu))
+     low_rankD <- cbind(D, rep(1,ni), beta)
     
     # Calculate gamma0
     # gamma0 <- low_rankC %*% t(low_rankD)
@@ -373,20 +373,20 @@ parEstSlow <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=N
                            x = df01[ ,"deriv"], dims = c(nu, ni))
     
     # +++++++++++++ THIS CHAHNGED NOW ++++++++++++++++
-    H_slr <- sparse + alpha + beta + C %*% t(D)
+    H_slr <- sparse + low_rankC%*%t(low_rankD)
     
     # Updating alpha and beta
     newalpha <- rowMeans(H_slr)
     
     # Subtract the rowmean from H for the update for beta
     low_rankC <- cbind(C, (alpha - newalpha), rep(1, nu))
-    H_slr_rowmean <- splr(sparse, low_rankC, low_rankD)
+    H_slr_rowmean <- sparse + low_rankC%*%t(low_rankD)
     newbeta <- colMeans(H_slr_rowmean)
     
     # Updating the C and D
     # Remove row and column mean from H
     low_rankD <- cbind(D, rep(1, ni), (beta - newbeta))
-    H_slr_rowandcolmean <- splr(sparse, low_rankC, low_rankD)
+    H_slr_rowandcolmean <- sparse + low_rankC%*%t(low_rankD)
     
     # Retrieve C and D from the svd.als function
     results <- svd.als(H_slr_rowandcolmean, rank.max = factors, lambda = lambda * 4)
