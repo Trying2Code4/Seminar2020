@@ -471,6 +471,40 @@ parEstSlow <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=N
   return(output)
 }
 
+
+speedSim <- function(NU, NI, SPARSITY, FACTORS){
+  # Initialize a multidimensional output array
+  # Rows are all the possible permutations of the huperparameters * folds
+  rows <- (length(NU) * length(NI) * length(SPARSITY) * length(FACTORS))
+  
+  # Columns for the hyperparameters, plus a name variable, and then all the results you want
+  # these are: rmse, TP (true positive(1)), TN, FP, FN, number of iterations, best baseline, epsilon
+  columns <- 4 + 1 + 
+  
+  # Initialize the df (depth is the number of folds)
+  CVoutput <- data.frame(matrix(NA, nrow = rows, ncol = columns))
+  names(CVoutput) <- c("Factor", "Lambda", "InitType", "OnlyVar", "Epsilon", "Specification",
+                       "RetainedFactors", "RMSE", "TP", "TN", "FP", "FN", "Iter", "rmseUser", 
+                       "DifferenceRMSE")
+  
+  for (a in 1:length(NU)){
+    for (b in 1:length(NI)){
+      for (c in 1:length(SPARSITY)){
+        for (d in 1:length(FACTORS)){
+          nu <- NU[a]
+          ni <- NI[b]
+          sparsity <- SPARSITY[c]
+          f <- FACTORS[d]
+          df <- makeData(nu, ni, sparsity, f, alpha=NULL, beta=NULL, C=NULL, D=NULL)
+          
+          
+        }
+      }
+    }
+  }
+}
+
+
 tm1 <- system.time(
   {
     sample(1:100000000, size=100000)
