@@ -390,14 +390,12 @@ parEstSlow <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=N
     newalpha <- rowMeans(H_slr)
     
     # Subtract the rowmean from H for the update for beta
-    low_rankC <- cbind(C, (alpha - newalpha), rep(1, nu))
-    H_slr_rowmean <- sparse + low_rankC%*%t(low_rankD)
+    H_slr_rowmean <- scale(H_slr, scale = FALSE)
     newbeta <- colMeans(H_slr_rowmean)
     
     # Updating the C and D
     # Remove row and column mean from H
-    low_rankD <- cbind(D, rep(1, ni), (beta - newbeta))
-    H_slr_rowandcolmean <- sparse + low_rankC%*%t(low_rankD)
+    H_slr_rowandcolmean <- t(scale(t(H_slr_rowmean), scale = FALSE))
     
     # Retrieve C and D from the svd.als function
     results <- svd.als(H_slr_rowandcolmean, rank.max = factors, lambda = lambda * 4)
