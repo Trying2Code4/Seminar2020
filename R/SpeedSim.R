@@ -13,18 +13,18 @@ library(openxlsx)
 sourceCpp("gammaui.cpp")
 source("MajorizationFunctions.R")
 
-makeData <- function(nu, ni, sparsity, f=NULL, alpha=NULL, beta=NULL, C=NULL, D=NULL){
+makeData <- function(nu, ni, sparsity, f=3, alpha = NULL, beta=NULL, C=NULL, D=NULL){
   # If not predetermined udnerlying model is given
-  if (alpha=NULL){
+  if (is.null(alpha)){
     alpha <- runif(nu, min=-5, max=0)
   }
-  if (beta=NULL){
+  if (is.null(beta)){
     beta <- runif(ni, min=-5, max=0)
   }
-  if (C=NULL){
+  if (is.null(C)){
     C <- matrix(rnorm(nu * f, 0, 2), nu, f)
   }
-  if (D=NULL){
+  if (is.null(D)){
     D <- matrix(rnorm(ni * f, 0, 2), ni, f)
   }
 
@@ -33,7 +33,7 @@ makeData <- function(nu, ni, sparsity, f=NULL, alpha=NULL, beta=NULL, C=NULL, D=
   probability <- exp(gamma) / (1 + exp(gamma))
   
   # Create a train subset with a certain sparsity level
-  sparsity <- 0.1
+  sparsity <- sparsity
   
   # Retrieve random elements from the matrix
   USERID <- rep(c(1:nu), each = ni)
@@ -390,12 +390,12 @@ parEstSlow <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=N
     newalpha <- rowMeans(H_slr)
     
     # Subtract the rowmean from H for the update for beta
-    H_slr_rowmean <- scale(H_slr, scale = FALSE)
+    H_slr_rowmean <- t(scale(t(H_slr), scale = FALSE))
     newbeta <- colMeans(H_slr_rowmean)
     
     # Updating the C and D
     # Remove row and column mean from H
-    H_slr_rowandcolmean <- t(scale(t(H_slr_rowmean), scale = FALSE))
+    H_slr_rowandcolmean <- scale(H_slr_rowmean, scale = FALSE)
     
     # Retrieve C and D from the svd.als function
     results <- svd.als(H_slr_rowandcolmean, rank.max = factors, lambda = lambda * 4)
@@ -472,6 +472,7 @@ parEstSlow <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=N
 }
 
 
+
 speedSim <- function(NU, NI, SPARSITY, FACTORS){
   # Initialize a multidimensional output array
   # Rows are all the possible permutations of the huperparameters * folds
@@ -505,11 +506,19 @@ speedSim <- function(NU, NI, SPARSITY, FACTORS){
 }
 
 
+
+testdata <- makeData(100,100,0.5, 5)
+parEst(testdata, 3, 10, 100, 2, FALSE, FALSE)
+parEstSlow(testdata, 3, 10, 100, 2, FALSE, FALSE)
+testdata <- df_train[df_train$USERID_ind < 1000,]
+
+
 tm1 <- system.time(
   {
     sample(1:100000000, size=100000)
   })
 
 tm1[1] - 0.1
+
 
   
