@@ -141,7 +141,11 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
   C_track <- C
   D_track <- D
   
+  runtime <- rep(NA, iter)
+  
   while (run <= iter) {
+    time <- system.time({
+    
     
     tic(paste("Complete iteration", run, sep = " "))
     # Define low rank representation of gamma0
@@ -243,15 +247,20 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     # Keeping track of the number of factors
     factors_all[run] <- sum(results$d > 0)
     
+    })
+    runtime[run-1] <- time
+    
   }
   
   # Keeping track
   par_track <- list("alpha_track" = alpha_track, "beta_track" = beta_track, 
                     "C_track" = C_track, "D_track" = D_track)
   
+  meanTime <- mean(runtime)
+  
   output <- list("alpha" = alpha, "beta" = beta, "C" = C, "D" = D, "objective" = objective_all, 
                  "deviance" = deviance_all, "rmse" = rmse_it, "run" = run, "factors" = factors_all,
-                 "par_track" = par_track)
+                 "par_track" = par_track, "meanTime" = meanTime)
   return(output)
 }
 
@@ -349,6 +358,8 @@ parEstSlow <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=N
   D_track <- D
   
   while (run <= iter) {
+    
+    
     
     tic(paste("Complete iteration", run, sep = " "))
     # Define low rank representation of gamma0
@@ -460,10 +471,19 @@ parEstSlow <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=N
   return(output)
 }
 
+<<<<<<< HEAD
 testdata <- makeData(100,100,0.5, 5)
 parEst(testdata, 3, 10, 100, 2, FALSE, FALSE)
 parEstSlow(testdata, 3, 10, 100, 2, FALSE, FALSE)
 testdata <- df_train[df_train$USERID_ind < 1000,]
 
+=======
+tm1 <- system.time(
+  {
+    sample(1:100000000, size=100000)
+  })
+
+tm1[1] - 0.1
+>>>>>>> c6cfc71248e3bc37a8a02c9135ee922a6ddbf84c
 
   

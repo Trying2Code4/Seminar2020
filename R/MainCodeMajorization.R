@@ -137,14 +137,13 @@ df <- df[df$USERID_ind < 10000, c("USERID", "OFFERID", "CLICK")]
 
 # Input whichever hyperparameters you want to test
 # FACTORS <- c(1, 2, 5, 10, 20)
-FACTORS <- c(5)
-# LAMBDA <- c(1000, 500, 250, 200, 100, 75, 50, 25, 10, 5, 2, 1)
-LAMBDA <- c(1000, 500, 250)
+FACTORS <- c(15)
+LAMBDA <- c(250, 200, 100, 75, 50, 25, 10, 5, 2, 1)
 INITTYPE <- c(2)
 ONLYVAR <- c(TRUE, FALSE)
 folds <- 5
-iter <- 1000
-epsilon <- 1e-04
+iter <- 2500
+epsilon <- 1e-06
 warm <- TRUE
 
 CVoutput <- crossValidate(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter, 
@@ -160,6 +159,33 @@ p <- ggplot(CVoutput, aes(x=Specification, y=RMSE)) +
 p
   
 CVoutput$RMSE
+
+# Running algorithm using best parameters from CV ----------------------------------------
+df_train <- readRDS("df_train")
+df_train <- df_train[, c("USERID", "MailOffer", "CLICK")]
+
+df_val <- readRDS("df_val")
+df_val <- df_val[, c("USERID", "MailOffer", "CLICK")]
+
+# Input whichever hyperparameters you want to test
+factors <- 3
+lambda <- 10
+iter <- 1000
+initType <- 2
+llh = TRUE
+rmse = TRUE
+epsilon <- 1e-05
+
+prep <- prepData(df_train, df_val, onlyVar = FALSE)
+
+train <- prep$df_train
+test <- prep$df_test
+globalMean <- prep$globalMean
+
+set.seed(0)
+outputFalse <- fullAlg(train, test, factors, lambda, iter, initType, llh, 
+                  rmse, epsilon, globalMean = globalMean)
+
 
 # Fitting on a set -----------------------------------------------------------------------
 df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/SharedData/df_train.RDS")
