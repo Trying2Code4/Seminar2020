@@ -248,7 +248,7 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     factors_all[run] <- sum(results$d > 0)
     
     })
-    runtime[run-1] <- time
+    runtime[run-1] <- time[1]
     
   }
   
@@ -363,8 +363,8 @@ parEstSlow <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=N
     
     tic(paste("Complete iteration", run, sep = " "))
     # Define low rank representation of gamma0
-     low_rankC <- cbind(C, alpha, rep(1, nu))
-     low_rankD <- cbind(D, rep(1,ni), beta)
+    low_rankC <- cbind(C, alpha, rep(1, nu))
+    low_rankD <- cbind(D, rep(1,ni), beta)
     
     # Calculate gamma0
     # gamma0 <- low_rankC %*% t(low_rankD)
@@ -384,6 +384,7 @@ parEstSlow <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=N
                            x = df01[ ,"deriv"], dims = c(nu, ni))
     
     # +++++++++++++ THIS CHAHNGED NOW ++++++++++++++++
+    # Calculating the H matrix for alpha update
     H_slr <- sparse + low_rankC%*%t(low_rankD)
     
     # Updating alpha and beta
@@ -396,6 +397,10 @@ parEstSlow <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=N
     # Updating the C and D
     # Remove row and column mean from H
     H_slr_rowandcolmean <- scale(H_slr_rowmean, scale = FALSE)
+    H_slr_rowandcolmean <- as(H_slr_rowandcolmean, "sparseMatrix")
+    # a <- matrix(0, nrow=nu, ncol=1)
+    # b <- matrix(0, nrow=ni, ncol=1)
+    # H_slr_rowandcolmean <- splr(H_slr_rowandcolmean)
     
     # Retrieve C and D from the svd.als function
     results <- svd.als(H_slr_rowandcolmean, rank.max = factors, lambda = lambda * 4)
@@ -505,13 +510,26 @@ speedSim <- function(NU, NI, SPARSITY, FACTORS){
   }
 }
 
+#### Run it ------------------------------------------------------------------------------
+
+factors <- 3
+lambda <- 0.0001
+iter <- 10
+initType <- 2
+onlyVar <- T
+llh <- FALSE
+rmse <- FALSE
+epsilon <- 0.001
 
 
-testdata <- makeData(100,100,0.5, 5)
-parEst(testdata, 3, 10, 100, 2, FALSE, FALSE)
-parEstSlow(testdata, 3, 10, 100, 2, FALSE, FALSE)
-testdata <- df_train[df_train$USERID_ind < 1000,]
+df <- makeData(nu=100,ni=100, sparsity=0.5, f=5)
 
+parEst(df, factors, lambda, iter, initType, llh, rmse, epsilon=epsilon)
+
+parEstSlow(df, factors, lambda, iter, initType, llh, rmse, epsilon=epsilon)
+
+debug(parEst)
+debug(parEstSlow)
 
 tm1 <- system.time(
   {
