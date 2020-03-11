@@ -67,10 +67,6 @@ mu <- function(x){
 #' @return training set, corresponding test set, and global mean click rate of training set
 #' 
 trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL, test_size = 0.2){
-  # Formatting
-  original <- names(df)
-  names(df)[1:3] <- c("USERID", "OFFERID", "CLICK")
-  
   # Make the test train split (test set has value 1)
   if (cv) {
     # In case of cross validation (folds are known beforehand)
@@ -81,7 +77,6 @@ trainTest <- function(df, onlyVar, cv=FALSE, ind=NULL, fold=NULL, test_size = 0.
     df$train_test <- rbinom(n = nrow(df), size = 1, prob = test_size)
   }
   
-  names(df) <- c(original, "train_test")
   return(prepData(df[!as.logical(df$train_test), ], df[as.logical(df$train_test), ], onlyVar))
 }
 
@@ -452,7 +447,7 @@ fullAlg <- function(df_train, df_test, factors, lambda, iter, initType, llh=FALS
   # Getting predictions
   tic("3. Getting predictions")
   results <- getPredict(df_test[ ,c("USERID_ind", "OFFERID_ind", "CLICK",
-                                    "ratioU", "ratioO", "prediction", "USERID", "OFFERID")], 
+                                    "ratioU", "ratioO", "prediction", "USERID", "MailOffer")], 
                         pars$alpha, pars$beta, pars$C, pars$D)
   toc()
   
@@ -476,7 +471,7 @@ fullAlg <- function(df_train, df_test, factors, lambda, iter, initType, llh=FALS
   
   # Output
   output <- list("parameters" = pars,
-                 "prediction" = results[, c("USERID", "OFFERID","USERID_ind", "OFFERID_ind",
+                 "prediction" = results[, c("USERID", "MailOffer","USERID_ind", "OFFERID_ind",
                                             "CLICK", "prediction", "predictionBin", "ratioU",
                                             "ratioO")], 
                  "RMSE" = RMSE,
@@ -653,6 +648,8 @@ prepData <- function(df_train, df_test, onlyVar){
   df_test$train_test <- 1
   df_train$train_test <- 0
   df <- rbind(df_train, df_test)
+  
+  names(df)[1:3] <- c("USERID", "MailOffer", "CLICK")
   
   # Use the train test function
   # User/offer click rate in train set (if user or offer not in train set, average is set at NaN)

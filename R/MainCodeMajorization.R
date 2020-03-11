@@ -83,15 +83,15 @@ df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_t
 
 # If we want to use subset:
 df <- df[df$USERID_ind < 10000,]
-df <- df[, c("USERID", "OFFERID", "CLICK")]
+df <- df[, c("USERID", "MailOffer", "CLICK")]
 
 
 mean(df$CLICK)
 mean(df_test$CLICK)
 # Setting parameters
-factors <- 20
+factors <- 5
 lambda <- 20
-iter <- 1000
+iter <- 10
 initType <- 2
 onlyVar <- T
 llh <- FALSE
@@ -101,7 +101,7 @@ epsilon <- 0.001
 set.seed(50)
 split <- trainTest(df, onlyVar)
 df_train <- split$df_train[ ,c("USERID_ind", "OFFERID_ind", "CLICK")]
-df_test <- split$df_test[ ,c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO", "prediction", "USERID", "OFFERID")]
+df_test <- split$df_test[ ,c("USERID_ind", "OFFERID_ind", "CLICK", "ratioU", "ratioO", "prediction", "USERID", "MailOffer")]
 globalMean <- split$globalMean
 rm("split")
 
@@ -133,7 +133,7 @@ par(mfrow=c(1,1))
 # Make sure the names are correct
 # df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
 df <- readRDS("df_train")
-df <- df[df$USERID_ind < 10000, c("USERID", "OFFERID", "CLICK")]
+df <- df[df$USERID_ind < 10000, c("USERID", "MailOffer", "CLICK")]
 
 # Input whichever hyperparameters you want to test
 # FACTORS <- c(1, 2, 5, 10, 20)
@@ -174,9 +174,10 @@ iter <- 1000
 initType <- 2
 llh = TRUE
 rmse = TRUE
-epsilon <- 1e-05
+epsilon <- 1e-04
+onlyVar = FALSE
 
-prep <- prepData(df_train, df_val, onlyVar = FALSE)
+prep <- prepData(df_train, df_val, onlyVar)
 
 train <- prep$df_train
 test <- prep$df_test
@@ -190,7 +191,7 @@ outputFalse <- fullAlg(train, test, factors, lambda, iter, initType, llh,
 # Fitting on a set -----------------------------------------------------------------------
 df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/SharedData/df_train.RDS")
 # df <- df[, c("USERID_ind", "OFFERID_ind", "CLICK")]
-df <- df[, c("USERID", "OFFERID", "CLICK")]
+df <- df[, c("USERID", "MailOffer", "CLICK")]
 
 # Setting parameters
 factors <- 3
@@ -206,7 +207,7 @@ epsilon <- 0.00000001
 df <- df %>% 
   mutate(USERID_ind = group_indices(., factor(USERID, levels = unique(USERID))))
 df <- df %>% 
-  mutate(OFFERID_ind = group_indices(., factor(OFFERID, levels = unique(OFFERID))))
+  mutate(OFFERID_ind = group_indices(., factor(MailOffer, levels = unique(MailOffer))))
 df <- df[ ,c("USERID_ind", "OFFERID_ind", "CLICK")]
 
 tic("Total time to fit")
