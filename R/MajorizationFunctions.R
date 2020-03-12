@@ -265,7 +265,7 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     # C_track <- cbind(C_track, C)
     # D_track <- cbind(D_track, D)
     
-    # tic(paste("Complete iteration", run, sep = " "))
+     tic(paste("Complete iteration", run, sep = " "))
     # Define low rank representation of gamma0
     low_rankC <- cbind(C, alpha, rep(1, nu))
     low_rankD <- cbind(D, rep(1,ni), beta)
@@ -352,7 +352,7 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
       
       rmse_it[run] <- sqrt(mean((predictions - actuals)^2))
     }
-    # toc()
+     toc()
     
     if (!is.null(epsilon)) {
       if (!is.infinite(objective_new) && !is.infinite(objective_old)) {
@@ -438,6 +438,10 @@ getPredict <- function(df, alpha, beta, C, D){
 fullAlg <- function(df_train, df_test, factors, lambda, iter, initType, llh=FALSE, 
                     rmse=FALSE, epsilon=NULL, a_in = NULL, b_in = NULL, C_in = NULL, D_in = NULL,
                     globalMean){
+  # Make sure variables are in correct order
+  df_test <- df_test[ ,c("USERID_ind", "OFFERID_ind", "CLICK",
+              "ratioU", "ratioO", "prediction", "USERID", "MailOffer")]
+  
   # Estimating parameters
   tic("2. Estimating parameters")
   pars <- parEst(df_train, factors, lambda, iter, initType, llh, rmse, df_test, 
@@ -446,9 +450,7 @@ fullAlg <- function(df_train, df_test, factors, lambda, iter, initType, llh=FALS
   
   # Getting predictions
   tic("3. Getting predictions")
-  results <- getPredict(df_test[ ,c("USERID_ind", "OFFERID_ind", "CLICK",
-                                    "ratioU", "ratioO", "prediction", "USERID", "MailOffer")], 
-                        pars$alpha, pars$beta, pars$C, pars$D)
+  results <- getPredict(df_test, pars$alpha, pars$beta, pars$C, pars$D)
   toc()
   
   # RMSE
