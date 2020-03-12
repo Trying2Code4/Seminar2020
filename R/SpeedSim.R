@@ -13,7 +13,7 @@ library(openxlsx)
 sourceCpp("gammaui.cpp")
 source("MajorizationFunctions.R")
 
-makeData <- function(nu, ni, sparsity, f=3, alpha = NULL, beta=NULL, C=NULL, D=NULL){
+makeData <- function(nu, ni, sparsity, f=4, alpha = NULL, beta=NULL, C=NULL, D=NULL){
   # If not predetermined udnerlying model is given
   if (is.null(alpha)){
     alpha <- runif(nu, min=-5, max=0)
@@ -314,6 +314,8 @@ parEstSlow <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=N
   # Initialize iteration number
   run <- 1
   
+  runtime <- rep(NA, iter)
+  
   if (!is.null(epsilon) || llh) {
     deviance_new <- sum(logllh1(gamma_y1)) + sum(logllh0(gamma_y0))
     objective_new <- deviance_new + 
@@ -359,7 +361,7 @@ parEstSlow <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=N
   
   while (run <= iter) {
     
-    
+    time <- system.time({
     
     tic(paste("Complete iteration", run, sep = " "))
     # Define low rank representation of gamma0
@@ -391,12 +393,14 @@ parEstSlow <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=N
     newalpha <- rowMeans(H_slr)
     
     # Subtract the rowmean from H for the update for beta
-    H_slr_rowmean <- t(scale(t(H_slr), scale = FALSE))
+    # H_slr_rowmean <- t(scale(t(H_slr), scale = FALSE))
+    H_slr_rowmean <- H_slr - newalpha
     newbeta <- colMeans(H_slr_rowmean)
     
     # Updating the C and D
     # Remove row and column mean from H
-    H_slr_rowandcolmean <- scale(H_slr_rowmean, scale = FALSE)
+    # H_slr_rowandcolmean <- scale(H_slr_rowmean, scale = FALSE)
+    H_slr_rowandcolmean <- H_slr_rowmean - newbeta
     H_slr_rowandcolmean <- as(H_slr_rowandcolmean, "sparseMatrix")
     # a <- matrix(0, nrow=nu, ncol=1)
     # b <- matrix(0, nrow=ni, ncol=1)
@@ -464,15 +468,20 @@ parEstSlow <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=N
     # Keeping track of the number of factors
     factors_all[run] <- sum(results$d > 0)
     
+    })
+    runtime[run-1] <- time[1]
+    
   }
   
   # Keeping track
   par_track <- list("alpha_track" = alpha_track, "beta_track" = beta_track, 
                     "C_track" = C_track, "D_track" = D_track)
   
+  meanTime <- mean(runtime)
+  
   output <- list("alpha" = alpha, "beta" = beta, "C" = C, "D" = D, "objective" = objective_all, 
                  "deviance" = deviance_all, "rmse" = rmse_it, "run" = run, "factors" = factors_all,
-                 "par_track" = par_track)
+                 "par_track" = par_track, "meanTime" = meanTime)
   return(output)
 }
 
@@ -484,59 +493,92 @@ speedSim <- function(NU, NI, SPARSITY, FACTORS){
   rows <- (length(NU) * length(NI) * length(SPARSITY) * length(FACTORS))
   
   # Columns for the hyperparameters, plus a name variable, and then all the results you want
-  # these are: rmse, TP (true positive(1)), TN, FP, FN, number of iterations, best baseline, epsilon
-  columns <- 4 + 1 + 
+  # these are: mean time for both methods
+  columns <- 4 + 1 + 2
   
   # Initialize the df (depth is the number of folds)
-  CVoutput <- data.frame(matrix(NA, nrow = rows, ncol = columns))
-  names(CVoutput) <- c("Factor", "Lambda", "InitType", "OnlyVar", "Epsilon", "Specification",
-                       "RetainedFactors", "RMSE", "TP", "TN", "FP", "FN", "Iter", "rmseUser", 
-                       "DifferenceRMSE")
+  output <- data.frame(matrix(NA, nrow = rows, ncol = columns))
+  names(output) <- c("nu", "ni", "sparsity", "factors", "Specification",
+                     "meanTimeFast", "meanTimeSlow")
+  
+  row <- 1
   
   for (a in 1:length(NU)){
     for (b in 1:length(NI)){
       for (c in 1:length(SPARSITY)){
         for (d in 1:length(FACTORS)){
+          tic(paste("Run", row, "out of", rows))
+          
           nu <- NU[a]
           ni <- NI[b]
           sparsity <- SPARSITY[c]
-          f <- FACTORS[d]
-          df <- makeData(nu, ni, sparsity, f, alpha=NULL, beta=NULL, C=NULL, D=NULL)
+          factors <- FACTORS[d]
           
+          # Create the data
+          df <- makeData(nu, ni, sparsity)
+          
+          # Run the algorithms
+          lambda <- 1
+          iter <- 5
+          initType <- 2
+          onlyVar <- T
+          llh <- FALSE
+          rmse <- FALSE
+          epsilon <- 0.001
+          
+          fast <- parEst(df, factors, lambda, iter, initType, llh, rmse, epsilon=epsilon)
+          
+          slow <- parEstSlow(df, factors, lambda, iter, initType, llh, rmse, epsilon=epsilon)
+         
+          # Fill the output
+          output$nu[row] <- nu
+          output$ni[row] <- ni
+          output$sparsity[row] <- sparsity
+          output$factors[row] <- factors
+          output$Specification[row] <- paste("nu = ", nu, ", ni = ", ni, 
+                                        ", sparsity = ", sparsity, ", factors = ", factors,
+                                        sep = "")
+          output$meanTimeFast[row] <- fast$meanTime
+          output$meanTimeSlow[row] <- fast$meanTime
+          
+          toc()
           
         }
       }
     }
   }
+  return(output)
 }
 
 #### Run it ------------------------------------------------------------------------------
 
-factors <- 3
-lambda <- 0.0001
-iter <- 10
+# Create data
+df <- makeData(nu=500,ni=100, sparsity=0.2)
+
+# Run the algorithms
+lambda <- 1
+iter <- 5
 initType <- 2
 onlyVar <- T
 llh <- FALSE
 rmse <- FALSE
 epsilon <- 0.001
 
+fast <- parEst(df, factors, lambda, iter, initType, llh, rmse, epsilon=epsilon)
 
-df <- makeData(nu=100,ni=100, sparsity=0.5, f=5)
+slow <- parEstSlow(df, factors, lambda, iter, initType, llh, rmse, epsilon=epsilon)
 
-parEst(df, factors, lambda, iter, initType, llh, rmse, epsilon=epsilon)
-
-parEstSlow(df, factors, lambda, iter, initType, llh, rmse, epsilon=epsilon)
-
-debug(parEst)
-debug(parEstSlow)
-
-tm1 <- system.time(
-  {
-    sample(1:100000000, size=100000)
-  })
-
-tm1[1] - 0.1
 
 
   
+
+
+#### Run the simulation ------------------------------------------------------------------
+NU <- c(100, 500, 1000, 2000, 5000, 10000, 50000)
+NI <- c(100)
+SPARSITY <- c(0.2)
+FACTORS <- c(5)
+
+output <- speedSim(NU, NI, SPARSITY, FACTORS)
+debug(speedSim)
+
