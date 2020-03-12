@@ -187,7 +187,7 @@ df_val <- df_val[, c("USERID", "MailOffer", "CLICK")]
 # Input whichever hyperparameters you want to test
 factors <- 3
 lambda <- 10
-iter <- 1000
+iter <- 1
 initType <- 2
 llh = TRUE
 rmse = TRUE
@@ -201,9 +201,14 @@ test <- prep$df_test
 globalMean <- prep$globalMean
 
 set.seed(0)
-outputFalse <- fullAlg(train, test, factors, lambda, iter, initType, llh, 
+output <- fullAlg(train, test, factors, lambda, iter, initType, llh, 
                   rmse, epsilon, globalMean = globalMean)
 
+baselineBest <- baselinePred(test, globalMean=globalMean)
+
+readRDS("outputbestcvlambda10fact20")
+
+write.csv(outputbestcvlambda10fact20$prediction, file = "Maj_pred_l10f20ret3.csv")
 
 # Fitting on a set -----------------------------------------------------------------------
 df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/SharedData/df_train.RDS")
@@ -324,6 +329,5 @@ saveRDS(df_val, "/Users/colinhuliselan/Documents/Master/Seminar/SharedData/df_va
 write.csv(df_val, file = "df_val.csv")
 saveRDS(df_train, "/Users/colinhuliselan/Documents/Master/Seminar/Shared_Data/df_train")
 write.csv(df_train, file = "df_train.csv")
-
 
 
