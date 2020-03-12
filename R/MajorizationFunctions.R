@@ -579,11 +579,9 @@ crossValidate <- function(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter,
             CVoutput$rmseUser[row] <- baselinePred(df_test, globalMean)$rmseUser
             CVoutput$DifferenceRMSE[row] <- CVoutput$RMSE[row]-CVoutput$rmseUser[row]
             
-            tic("saving file")
             if (!is.null(file)) {
               write.xlsx(CVoutput, file=file)
             }
-            toc()
             
             row <- row+1
             
