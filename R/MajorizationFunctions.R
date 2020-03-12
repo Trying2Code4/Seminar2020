@@ -686,3 +686,115 @@ prepData <- function(df_train, df_test, onlyVar){
   output <- list("df_train" = df_train, "df_test" = df_test, "globalMean" = globalMean)
   return(output)
 }
+
+#' Function for cross-validating hyperparameters, but without k-folds
+#'
+#' @param df dataframe
+#' @param FACTORS vector of factors (number of latent dimensions) to use
+#' @param LAMBDA vector of penalty terms to use
+#' @param INITTYPE vector of methods for initiation to use
+#' @param ONLYVAR whether or not observations without variation should be removed (can take TRUE, FALSE, or c(TRUE, FALSE))
+#' @param folds number of folds
+#' @param iter maximum number of iterations
+#' @param epsilon convergence limit
+#' @param warm boolean for whether or not to use warm start
+#'
+#' @return performance per combination of hyperparameters
+#'
+cvFast <- function(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, iter, 
+                          epsilon, warm, file=NULL){
+  
+  # Initialize a multidimensional output array
+  # Rows are all the possible permutations of the huperparameters
+  rows <- length(ONLYVAR) * length(FACTORS) * length(LAMBDA) * length(INITTYPE)
+  
+  # Columns for the hyperparameters, plus a name variable, and then all the results you want
+  # these are: rmse, TP (true positive(1)), TN, FP, FN, number of iterations, best baseline, epsilon
+  columns <- 15
+  
+  # Initialize the df (depth is the number of folds)
+  CVoutput <- data.frame(matrix(NA, nrow = rows, ncol = columns))
+  names(CVoutput) <- c("Factor", "Lambda", "InitType", "OnlyVar", "Epsilon", "Specification",
+                       "RetainedFactors", "RMSE", "TP", "TN", "FP", "FN", "Iter", "rmseUser", 
+                       "DifferenceRMSE")
+  
+  # Now we loop
+  row <- 1
+  for (a in 1:length(ONLYVAR)){
+    # Do onlyvar first because the train test split depends on it
+    onlyVar <- ONLYVAR[a]
+    
+    # Make the train test split without the cv option
+    split <- trainTest(df, onlyVar)
+    df_train <-split$df_train[ ,c("USERID_ind", "OFFERID_ind", "CLICK")]
+    df_test <- split$df_test
+    globalMean <- split$globalMean
+    
+    # Loop the other hyperparameters
+    
+    for (b in 1:length(FACTORS)){
+      # Initialize the warm start objects (can only be used within a certain factor size)
+      a_in <- NULL
+      b_in <- NULL
+      C_in <- NULL
+      D_in <- NULL
+      for (c in 1:length(LAMBDA)){
+        for (d in 1:length(INITTYPE)){
+          tic(paste("Run", row, "out of", rows, "in fold", z, "out of ", folds))
+          factors <- FACTORS[b]
+          lambda <- LAMBDA[c]
+          initType <- INITTYPE[d]
+          
+          # Run the algorithm
+          output <- fullAlg(df_train, df_test, factors, lambda, iter, initType, 
+                            epsilon = epsilon, a_in = a_in, b_in = b_in, C_in = C_in, D_in = D_in, 
+                            globalMean = globalMean)
+          
+          # Fill the array with output
+          CVoutput$Factor[row] <- factors
+          CVoutput$Lambda[row] <- lambda
+          CVoutput$InitType[row] <- initType
+          CVoutput$OnlyVar[row] <- onlyVar
+          CVoutput$Epsilon[row] <- epsilon
+          
+          # The name
+          CVoutput$Specification[row] <- paste("Factor = ", factors, ", Lambda = ", lambda, 
+                                               ", initType = ", initType, ", onlyVar = ", onlyVar,
+                                               ", warm = ", warm, sep = "")
+          
+          # Performance variables
+          CVoutput$RetainedFactors[row] <- output$parameters$factors[sum(!is.na(output$parameters$factors))]
+          CVoutput$RMSE[row] <- output$RMSE
+          CVoutput$TP[row] <- output$confusion$TP
+          CVoutput$TN[row] <- output$confusion$TN
+          CVoutput$FP[row] <- output$confusion$FP
+          CVoutput$FN[row] <- output$confusion$FN
+          CVoutput$Iter[row] <- output$parameters$run - 1
+          CVoutput$rmseUser[row] <- baselinePred(df_test, globalMean)$rmseUser
+          CVoutput$DifferenceRMSE[row] <- CVoutput$RMSE[row]-CVoutput$rmseUser[row]
+          
+          if (!is.null(file)) {
+            write.xlsx(CVoutput, file=file)
+          }
+          
+          row <- row+1
+          
+          # In case of warm starts, keep track of the last parameters
+          if (warm){
+            a_in <- output$parameters$alpha
+            b_in <- output$parameters$beta
+            C_in <- output$parameters$C
+            D_in <- output$parameters$D
+          }
+          
+          toc()
+          
+          
+        }
+      }
+    }
+  }
+  
+  return(CVoutput)
+}
+
