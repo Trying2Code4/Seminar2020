@@ -132,21 +132,21 @@ par(mfrow=c(1,1))
 # Import train set
 # Make sure the names are correct
 # df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
-df <- readRDS("df_train")
+df <- readRDS("df_train.RDS")
 df <- df[df$USERID_ind < 10000, c("USERID", "MailOffer", "CLICK")]
 
 # Input whichever hyperparameters you want to test
 # FACTORS <- c(1, 2, 5, 10, 20)
 FACTORS <- c(15)
-LAMBDA <- c(250, 200, 100, 75, 50, 25, 10, 5, 2, 1)
+LAMBDA <- c(250)
 INITTYPE <- c(2)
 ONLYVAR <- c(TRUE, FALSE)
 folds <- 5
-iter <- 2500
+iter <- 10
 epsilon <- 1e-06
 warm <- TRUE
 
-CVoutput <- crossValidate(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter, 
+CV <- crossValidate(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, folds, iter, 
                           epsilon, warm)
 
 CVoutput_mean <- CVoutput %>% group_by(epsilon, Specification) %>% summarise_all(mean)
@@ -159,6 +159,23 @@ p <- ggplot(CVoutput, aes(x=Specification, y=RMSE)) +
 p
   
 CVoutput$RMSE
+
+
+# Cross val FAST -------------------------------------------------------------------------
+df <- readRDS("df_train.RDS")
+df <- df[df$USERID_ind < 10000, c("USERID", "MailOffer", "CLICK")]
+
+# Input whichever hyperparameters you want to test
+FACTORS <- c(15, 20)
+LAMBDA <- c(250)
+INITTYPE <- c(2)
+ONLYVAR <- c(TRUE, FALSE)
+iter <- 10
+epsilon <- 1e-06
+warm <- TRUE
+
+CVfast <- cvFast(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, iter, epsilon, warm)
+
 
 # Running algorithm using best parameters from CV ----------------------------------------
 df_train <- readRDS("df_train")
