@@ -740,7 +740,7 @@ cvFast <- function(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, iter,
       D_in <- NULL
       for (c in 1:length(LAMBDA)){
         for (d in 1:length(INITTYPE)){
-          tic(paste("Run", row, "out of", rows, "in fold", z, "out of ", folds))
+          tic(paste("Run", row, "out of", rows))
           factors <- FACTORS[b]
           lambda <- LAMBDA[c]
           initType <- INITTYPE[d]

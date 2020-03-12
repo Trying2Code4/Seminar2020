@@ -160,6 +160,23 @@ p
   
 CVoutput$RMSE
 
+
+# Cross val FAST -------------------------------------------------------------------------
+df <- readRDS("df_train.RDS")
+df <- df[df$USERID_ind < 10000, c("USERID", "MailOffer", "CLICK")]
+
+# Input whichever hyperparameters you want to test
+FACTORS <- c(15, 20)
+LAMBDA <- c(250)
+INITTYPE <- c(2)
+ONLYVAR <- c(TRUE, FALSE)
+iter <- 10
+epsilon <- 1e-06
+warm <- TRUE
+
+CVfast <- cvFast(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, iter, epsilon, warm)
+
+
 # Running algorithm using best parameters from CV ----------------------------------------
 df_train <- readRDS("df_train")
 df_train <- df_train[, c("USERID", "MailOffer", "CLICK")]
