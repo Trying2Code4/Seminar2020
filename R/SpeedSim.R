@@ -400,7 +400,7 @@ parEstSlow <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=N
     # Updating the C and D
     # Remove row and column mean from H
     # H_slr_rowandcolmean <- scale(H_slr_rowmean, scale = FALSE)
-    H_slr_rowandcolmean <- H_slr_rowmean - newbeta
+    H_slr_rowandcolmean <- t(t(H_slr_rowmean) - newbeta)
     H_slr_rowandcolmean <- as(H_slr_rowandcolmean, "sparseMatrix")
     # a <- matrix(0, nrow=nu, ncol=1)
     # b <- matrix(0, nrow=ni, ncol=1)
@@ -567,7 +567,7 @@ epsilon <- 0.001
 fast <- parEst(df, factors, lambda, iter, initType, llh, rmse, epsilon=epsilon)
 
 slow <- parEstSlow(df, factors, lambda, iter, initType, llh, rmse, epsilon=epsilon)
-
+debug(parEstSlow)
 
 
   
