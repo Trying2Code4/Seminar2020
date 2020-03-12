@@ -248,7 +248,7 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     factors_all[run] <- sum(results$d > 0)
     
     })
-    runtime[run-1] <- time[1]
+    runtime[run-1] <- time[3]
     
   }
   
@@ -256,7 +256,7 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
   par_track <- list("alpha_track" = alpha_track, "beta_track" = beta_track, 
                     "C_track" = C_track, "D_track" = D_track)
   
-  meanTime <- mean(runtime)
+  meanTime <- mean(runtime[-1])
   
   output <- list("alpha" = alpha, "beta" = beta, "C" = C, "D" = D, "objective" = objective_all, 
                  "deviance" = deviance_all, "rmse" = rmse_it, "run" = run, "factors" = factors_all,
@@ -469,7 +469,7 @@ parEstSlow <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=N
     factors_all[run] <- sum(results$d > 0)
     
     })
-    runtime[run-1] <- time[1]
+    runtime[run-1] <- time[3]
     
   }
   
@@ -477,7 +477,7 @@ parEstSlow <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=N
   par_track <- list("alpha_track" = alpha_track, "beta_track" = beta_track, 
                     "C_track" = C_track, "D_track" = D_track)
   
-  meanTime <- mean(runtime)
+  meanTime <- mean(runtime[-1])
   
   output <- list("alpha" = alpha, "beta" = beta, "C" = C, "D" = D, "objective" = objective_all, 
                  "deviance" = deviance_all, "rmse" = rmse_it, "run" = run, "factors" = factors_all,
@@ -487,7 +487,7 @@ parEstSlow <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=N
 
 
 
-speedSim <- function(NU, NI, SPARSITY, FACTORS){
+speedSim <- function(NU, NI, SPARSITY, FACTORS, file="speedSim.xlsx"){
   # Initialize a multidimensional output array
   # Rows are all the possible permutations of the huperparameters * folds
   rows <- (length(NU) * length(NI) * length(SPARSITY) * length(FACTORS))
@@ -541,6 +541,10 @@ speedSim <- function(NU, NI, SPARSITY, FACTORS){
           output$meanTimeFast[row] <- fast$meanTime
           output$meanTimeSlow[row] <- fast$meanTime
           
+          write.xlsx(output, file = file)
+          
+          row <- row+1
+          
           toc()
           
         }
@@ -553,7 +557,7 @@ speedSim <- function(NU, NI, SPARSITY, FACTORS){
 #### Run it ------------------------------------------------------------------------------
 
 # Create data
-df <- makeData(nu=500,ni=100, sparsity=0.2)
+df <- makeData(nu=5000,ni=1000, sparsity=0.2)
 
 # Run the algorithms
 lambda <- 1
@@ -564,9 +568,15 @@ llh <- FALSE
 rmse <- FALSE
 epsilon <- 0.001
 
+
+set.seed(123)
 fast <- parEst(df, factors, lambda, iter, initType, llh, rmse, epsilon=epsilon)
 
+set.seed(123)
 slow <- parEstSlow(df, factors, lambda, iter, initType, llh, rmse, epsilon=epsilon)
+
+fast$alpha - slow$alpha
+
 debug(parEstSlow)
 
 
@@ -574,11 +584,13 @@ debug(parEstSlow)
 
 
 #### Run the simulation ------------------------------------------------------------------
-NU <- c(100, 500, 1000, 2000, 5000, 10000, 50000)
+NU <- c(100, 100, 1000, 10000, 100000, 1000000)
 NI <- c(100)
-SPARSITY <- c(0.2)
-FACTORS <- c(5)
+SPARSITY <- c(0.05)
+FACTORS <- c(5, 10, 15, 20)
 
-output <- speedSim(NU, NI, SPARSITY, FACTORS)
+output <- speedSim(NU, NI, SPARSITY, FACTORS, file="speedsim1.xlsx")
+
 debug(speedSim)
+
 
