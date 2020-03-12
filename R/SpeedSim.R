@@ -13,7 +13,7 @@ library(openxlsx)
 sourceCpp("gammaui.cpp")
 source("MajorizationFunctions.R")
 
-makeData <- function(nu, ni, sparsity, f=4, alpha = NULL, beta=NULL, C=NULL, D=NULL){
+makeData <- function(nu, ni, sparsity, f=2, alpha = NULL, beta=NULL, C=NULL, D=NULL){
   # If not predetermined udnerlying model is given
   if (is.null(alpha)){
     alpha <- runif(nu, min=-5, max=0)
@@ -27,19 +27,31 @@ makeData <- function(nu, ni, sparsity, f=4, alpha = NULL, beta=NULL, C=NULL, D=N
   if (is.null(D)){
     D <- matrix(rnorm(ni * f, 0, 2), ni, f)
   }
-
   
-  gamma <- alpha + beta + C %*% t(D) + matrix(rnorm(nu*ni, 0, 1), nu, ni)
+  low_rankC <- cbind(C, alpha, rep(1, nu))
+  low_rankD <- cbind(D, rep(1,ni), beta)
+  
+  gamma <- low_rankC %*% t(low_rankD) + matrix(rnorm(nu*ni, 0, 1), nu, ni)
   probability <- exp(gamma) / (1 + exp(gamma))
   
   # Create a train subset with a certain sparsity level
-  sparsity <- sparsity
+  # Make indice matrices
+  # First we take something like a "diagonal"
+  USERID <- rep(c(1:nu), times= ni)
+  OFFERID <- rep(c(1:ni), times = nu)
+  df <- data.frame("USERID" = USERID, "OFFERID" = OFFERID)
+  df_diag <- df[1:max(nu,ni), ]
   
-  # Retrieve random elements from the matrix
+  # Sample from the remainder
   USERID <- rep(c(1:nu), each = ni)
   OFFERID <- rep(c(1:ni), times = nu)
   df <- data.frame("USERID" = USERID, "OFFERID" = OFFERID)
-  df <- df[sample(1:length(USERID), size = sparsity * nu * ni), ]
+  df <- anti_join(df, df_diag)
+  
+  df_nodiag <- df[sample(1:nrow(df), size = (sparsity * nu * ni - nrow(df_diag))), ]
+  
+  # Combine diag and remainder
+  df <- rbind(df_diag, df_nodiag)
   
   # And the corresponding clicks
   df$CLICK <- probability[as.matrix(df[ , c("USERID", "OFFERID")])]
@@ -556,8 +568,16 @@ speedSim <- function(NU, NI, SPARSITY, FACTORS, file="speedSim.xlsx"){
 
 #### Run it ------------------------------------------------------------------------------
 
+debug(makeData)
 # Create data
-df <- makeData(nu=5000,ni=1000, sparsity=0.2)
+df <- makeData(nu=10000, ni=100, sparsity=0.05)
+
+length(unique(df$USERID))
+length(unique(df$OFFERID))
+
+nrow(unique(df))
+
+length(unique(t(df)))
 
 # Run the algorithms
 lambda <- 1
@@ -584,7 +604,7 @@ debug(parEstSlow)
 
 
 #### Run the simulation ------------------------------------------------------------------
-NU <- c(100, 100, 1000, 10000, 100000, 1000000)
+NU <- c(100, 1000, 10000, 100000, 1000000)
 NI <- c(100)
 SPARSITY <- c(0.05)
 FACTORS <- c(5, 10, 15, 20)
