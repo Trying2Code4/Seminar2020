@@ -13,26 +13,8 @@ library(openxlsx)
 sourceCpp("gammaui.cpp")
 source("MajorizationFunctions.R")
 
-makeData <- function(nu, ni, sparsity, f=2, alpha = NULL, beta=NULL, C=NULL, D=NULL){
-  # If not predetermined udnerlying model is given
-  if (is.null(alpha)){
-    alpha <- runif(nu, min=-5, max=0)
-  }
-  if (is.null(beta)){
-    beta <- runif(ni, min=-5, max=0)
-  }
-  if (is.null(C)){
-    C <- matrix(rnorm(nu * f, 0, 2), nu, f)
-  }
-  if (is.null(D)){
-    D <- matrix(rnorm(ni * f, 0, 2), ni, f)
-  }
-  
-  low_rankC <- cbind(C, alpha, rep(1, nu))
-  low_rankD <- cbind(D, rep(1,ni), beta)
-  
-  gamma <- low_rankC %*% t(low_rankD) + matrix(rnorm(nu*ni, 0, 1), nu, ni)
-  probability <- exp(gamma) / (1 + exp(gamma))
+makeData <- function(nu, ni, sparsity, f=2, alpha = NULL, beta=NULL, C=NULL, D=NULL,
+                     model=T){
   
   # Create a train subset with a certain sparsity level
   # Make indice matrices
@@ -53,9 +35,33 @@ makeData <- function(nu, ni, sparsity, f=2, alpha = NULL, beta=NULL, C=NULL, D=N
   # Combine diag and remainder
   df <- rbind(df_diag, df_nodiag)
   
-  # And the corresponding clicks
-  df$CLICK <- probability[as.matrix(df[ , c("USERID", "OFFERID")])]
-  df$CLICK <- as.numeric(df$CLICK > 0.5)
+  if (model){
+    # If not predetermined udnerlying model is given
+    if (is.null(alpha)){
+      alpha <- runif(nu, min=-5, max=0)
+    }
+    if (is.null(beta)){
+      beta <- runif(ni, min=-5, max=0)
+    }
+    if (is.null(C)){
+      C <- matrix(rnorm(nu * f, 0, 2), nu, f)
+    }
+    if (is.null(D)){
+      D <- matrix(rnorm(ni * f, 0, 2), ni, f)
+    }
+    
+    low_rankC <- cbind(C, alpha, rep(1, nu))
+    low_rankD <- cbind(D, rep(1,ni), beta)
+    
+    gamma <- low_rankC %*% t(low_rankD) + matrix(rnorm(nu*ni, 0, 1), nu, ni)
+    probability <- exp(gamma) / (1 + exp(gamma))
+    
+    # And the corresponding clicks
+    df$CLICK <- probability[as.matrix(df[ , c("USERID", "OFFERID")])]
+    df$CLICK <- as.numeric(df$CLICK > 0.5)
+  } else{
+    df$CLICK <- rbinom(n = nrow(df), size = 1, prob = 0.05)
+  }
   
   return(df)
 }
@@ -551,7 +557,7 @@ speedSim <- function(NU, NI, SPARSITY, FACTORS, file="speedSim.xlsx"){
                                         ", sparsity = ", sparsity, ", factors = ", factors,
                                         sep = "")
           output$meanTimeFast[row] <- fast$meanTime
-          output$meanTimeSlow[row] <- fast$meanTime
+          output$meanTimeSlow[row] <- slow$meanTime
           
           write.xlsx(output, file = file)
           
@@ -570,23 +576,26 @@ speedSim <- function(NU, NI, SPARSITY, FACTORS, file="speedSim.xlsx"){
 
 debug(makeData)
 # Create data
-df <- makeData(nu=10000, ni=100, sparsity=0.05)
+tic("simple model")
+df <- makeData(nu=300000, ni=2000, sparsity=0.05, model=F)
+
+# Or load data
+df <- readRDS("df_train.RDS")
 
 length(unique(df$USERID))
 length(unique(df$OFFERID))
-
 nrow(unique(df))
 
-length(unique(t(df)))
 
 # Run the algorithms
+factors <- 5
 lambda <- 1
 iter <- 5
 initType <- 2
 onlyVar <- T
 llh <- FALSE
 rmse <- FALSE
-epsilon <- 0.001
+epsilon <- 0.00001
 
 
 set.seed(123)
@@ -604,7 +613,7 @@ debug(parEstSlow)
 
 
 #### Run the simulation ------------------------------------------------------------------
-NU <- c(100, 1000, 10000, 100000, 1000000)
+NU <- c(1, 1000, 10000, 100000, 1000000)
 NI <- c(100)
 SPARSITY <- c(0.05)
 FACTORS <- c(5, 10, 15, 20)
