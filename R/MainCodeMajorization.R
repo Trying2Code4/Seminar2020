@@ -178,23 +178,33 @@ CVfast <- cvFast(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, iter, epsilon, warm)
 
 
 # Running algorithm using best parameters from CV ----------------------------------------
-df_train <- readRDS("df_train")
+df_train <- readRDS("df_train.RDS")
 df_train <- df_train[, c("USERID", "MailOffer", "CLICK")]
 
 df_val <- readRDS("df_val")
 df_val <- df_val[, c("USERID", "MailOffer", "CLICK")]
 
+
+df_obs <- read_delim("/Users/colinhuliselan/Documents/Master/Seminar/Code/SharedData.csv",
+                     ";", escape_double = FALSE, trim_ws = TRUE)
+
+saveRDS(df_obs, file="/Users/colinhuliselan/Documents/Master/Seminar/Code/SharedData.csv")
+
+df_obs <- readRDS("df_obs.RDS")
+df_train <- df_obs[df_obs$res == 0, ]
+df_res <- df_obs[df_obs$res == 1, ]
+
 # Input whichever hyperparameters you want to test
-factors <- 3
+factors <- 10
 lambda <- 10
-iter <- 1
+iter <- 200000
 initType <- 2
-llh = TRUE
-rmse = TRUE
-epsilon <- 1e-04
+llh = F
+rmse = F
+epsilon <- 1e-06
 onlyVar = FALSE
 
-prep <- prepData(df_train, df_val, onlyVar)
+prep <- prepData(df_train, df_res, onlyVar)
 
 train <- prep$df_train
 test <- prep$df_test
@@ -215,15 +225,16 @@ df <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/SharedData/df_trai
 # df <- df[, c("USERID_ind", "OFFERID_ind", "CLICK")]
 df <- df[, c("USERID", "MailOffer", "CLICK")]
 
+
 # Setting parameters
-factors <- 3
-lambda <- 5
-iter <- 30
+factors <- 10
+lambda <- 10
+iter <- 2000
 initType <- 2
-onlyVar <- T
-llh <- TRUE
+onlyVar <- FALSE
+llh <- FALSE
 rmse <- FALSE
-epsilon <- 0.00000001
+epsilon <- 1e-06
 
 # Make correct indices
 df <- df %>% 
@@ -260,6 +271,7 @@ gameResults <- getPredict(df_test, pars$alpha, pars$beta, pars$C, pars$D)
 # Import train and game set from whereever you store them
 df_obs <- read_delim("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/Observations_Report.csv",
                        ";", escape_double = FALSE, trim_ws = TRUE)
+
 df_game <- read_delim("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/Observations_Game.csv",
                       ";", escape_double = FALSE, trim_ws = TRUE)
 
