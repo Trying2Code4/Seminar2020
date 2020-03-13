@@ -7,6 +7,11 @@ library(RcppArmadillo)
 library(Rcpp)
 library(ggplot2)
 library(openxlsx)
+library(reshape2)
+require(MASS) # to access Animals data sets
+require(scales)
+library(gridExtra)
+
 
 # sourceCpp("/Users/colinhuliselan/Documents/Master/Seminar/Seminar2020_V2/R/gammaui.cpp")
 #sourceCpp("~/Dropbox/Uni/Master_Econometrie/Blok_3/Seminar2020/R/gammaui.cpp")
@@ -537,7 +542,7 @@ speedSim <- function(NU, NI, SPARSITY, FACTORS, file="speedSim.xlsx"){
           
           # Run the algorithms
           lambda <- 1
-          iter <- 5
+          iter <- 6
           initType <- 2
           onlyVar <- T
           llh <- FALSE
@@ -576,11 +581,19 @@ speedSim <- function(NU, NI, SPARSITY, FACTORS, file="speedSim.xlsx"){
 
 debug(makeData)
 # Create data
+tic("hard model")
+df <- makeData(nu=10^6, ni=100, sparsity=0.05, model=T)
+toc()
+
 tic("simple model")
-df <- makeData(nu=300000, ni=2000, sparsity=0.05, model=F)
+df <- makeData(nu=10^6, ni=100, sparsity=0.05, model=F)
+toc()
 
 # Or load data
 df <- readRDS("df_train.RDS")
+df <- df[, c("USERID", "MailOffer", "CLICK")]
+split <- trainTest(df, onlyVar)
+df <- split$df_train[ ,c("USERID_ind", "OFFERID_ind", "CLICK")]
 
 length(unique(df$USERID))
 length(unique(df$OFFERID))
@@ -613,13 +626,66 @@ debug(parEstSlow)
 
 
 #### Run the simulation ------------------------------------------------------------------
-NU <- c(1, 1000, 10000, 100000, 1000000)
+NU <- round(c(10^2, 10^2.5, 10^3, 10^3.5, 10^4, 10^4.5, 10^5, 10^5.5, 10^6))
 NI <- c(100)
-SPARSITY <- c(0.05)
-FACTORS <- c(5, 10, 15, 20)
+SPARSITY <- c(0.05, 0.25)
+FACTORS <- c(5, 20)
 
-output <- speedSim(NU, NI, SPARSITY, FACTORS, file="speedsim1.xlsx")
+speedsim1 <- speedSim(NU, NI, SPARSITY, FACTORS, file="speedsim1.xlsx")
 
 debug(speedSim)
+
+#### Create output -----------------------------------------------------------------------
+# Create a percentage difference
+speedsim1$diff <- (speedsim1$meanTimeSlow - speedsim1$meanTimeFast)/speedsim1$meanTimeFast * 100
+
+# Making a figure
+cols <- c("meanTimeFast" = "black", "meanTimeSlow" = "grey")
+f5_abs <- ggplot(dftemp_5, aes(x=nu, y=value, group=interaction(variable, sparsity),
+                               colour = variable, linetype = factor(sparsity)))+
+  geom_line()+
+  geom_point()+
+  scale_color_manual(name="Matrix type", labels=c("Sparse + LR", "Full matrix"),
+                       values=cols)+
+  scale_linetype_discrete(name="Sparsity level", labels=c("5%", "25%"))+
+  scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x),
+                labels = trans_format("log10", math_format(10^.x))) +
+  scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
+                labels = trans_format("log10", math_format(10^.x)))+
+  theme_bw()
+
+f5_abs2 <- ggplot(dftemp_5, aes(x=nu, y=value, group=interaction(variable, sparsity),
+                               colour = variable, linetype = factor(sparsity)))+
+  geom_line()+
+  geom_point()+
+  scale_color_manual(name="Matrix type", labels=c("Sparse + LR", "Full matrix"),
+                     values=cols)+
+  scale_linetype_discrete(name="Sparsity level", labels=c("5%", "25%"))+
+  scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x),
+                labels = trans_format("log10", math_format(10^.x))) +
+  # scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
+  #               labels = trans_format("log10", math_format(10^.x)))+
+  theme_bw()
+
+# Arranging in a grid
+grid.arrange(f5_abs, f5_abs2, ncol = 2, nrow = 1)
+
+
+
+#############
+df <- speedsim1
+dftemp05_5 <- df[(df$sparsity == 0.05 & df$factors == 5), c("nu", "meanTimeFast", "meanTimeSlow", "diff")]
+colnames(dftemp05_5) <- c("Number of users", "S+LR, 5% sparsity", "Full, 5% sparsity", "Difference, 5% sparsity")
+dftemp05_20 <- df[(df$sparsity == 0.05 & df$factors == 20), c("nu", "meanTimeFast", "meanTimeSlow", "diff")]
+colnames(dftemp05_20) <- c("Number of users", "S+LR, 5% sparsity", "Full, 5% sparsity", "Difference, 5% sparsity")
+dftemp25_5 <- df[(df$sparsity == 0.25 & df$factors == 5), c("meanTimeFast", "meanTimeSlow", "diff")]
+colnames(dftemp25_5) <- c("S+LR, 25% sparsity", "Full, 25% sparsity", "Difference, 25% sparsity")
+dftemp25_20 <- df[(df$sparsity == 0.25 & df$factors == 20), c("meanTimeFast", "meanTimeSlow", "diff")]
+colnames(dftemp25_20) <- c("S+LR, 25% sparsity", "Full, 25% sparsity", "Difference, 25% sparsity")
+
+
+dftemp_5 <- speedsim1[speedsim1$factors == 5, ]
+dftemp_5 <- melt(dftemp_5, id = c("nu", "sparsity") , measure = c("meanTimeFast", "meanTimeSlow"))
+
 
 

@@ -213,6 +213,8 @@ set.seed(0)
 output <- fullAlg(train, test, factors, lambda, iter, initType, llh, 
                   rmse, epsilon, globalMean = globalMean)
 
+ungroup()
+
 baselineBest <- baselinePred(test, globalMean=globalMean)
 
 
