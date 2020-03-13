@@ -185,14 +185,13 @@ df_val <- readRDS("df_val")
 df_val <- df_val[, c("USERID", "MailOffer", "CLICK")]
 
 
-df_obs <- read_delim("/Users/colinhuliselan/Documents/Master/Seminar/Code/SharedData.csv",
-                     ";", escape_double = FALSE, trim_ws = TRUE)
-
-saveRDS(df_obs, file="/Users/colinhuliselan/Documents/Master/Seminar/Code/SharedData.csv")
+# df_obs <- read_delim("/Users/colinhuliselan/Documents/Master/Seminar/SharedData/df_obs.csv",
+#                      ",", escape_double = FALSE, trim_ws = TRUE)
+# saveRDS(df_obs, file="/Users/colinhuliselan/Documents/Master/Seminar/SharedData/df_obs.RDS")
 
 df_obs <- readRDS("df_obs.RDS")
-df_train <- df_obs[df_obs$res == 0, ]
-df_res <- df_obs[df_obs$res == 1, ]
+df_train <- df_obs[df_obs$res == 0, c("USERID", "MailOffer", "CLICK")]
+df_res <- df_obs[df_obs$res == 1, c("USERID", "MailOffer", "CLICK")]
 
 # Input whichever hyperparameters you want to test
 factors <- 10
@@ -215,6 +214,7 @@ output <- fullAlg(train, test, factors, lambda, iter, initType, llh,
                   rmse, epsilon, globalMean = globalMean)
 
 baselineBest <- baselinePred(test, globalMean=globalMean)
+
 
 readRDS("outputbestcvlambda10fact20")
 
