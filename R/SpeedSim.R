@@ -651,30 +651,32 @@ f5_abs1 <- ggplot(dftemp_5_abs, aes(x=nu, y=value, group=interaction(variable, s
   geom_point()+
   scale_color_manual(name="Matrix type", labels=c("Sparse + LR", "Full matrix"),
                      values=cols)+
-  scale_linetype_discrete(name="Sparsity level", labels=c("5%", "25%"))+
+  scale_linetype_discrete(name="Sparsity level", labels=c("95%", "75%"))+
   scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x),
                 labels = trans_format("log10", math_format(10^.x))) +
-  labs(x ="Number of users", y = "Iteration speed")+
-  theme(legend.position = 'none')+
-  theme_bw()
+  labs(x ="Number of users", y = "Iteration time")+
+  theme_bw()+
+  theme(legend.position = c(0.3, 0.6))
 
 f5_abs2 <- f5_abs1 +
   scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
-                labels = trans_format("log10", math_format(10^.x)))
+                labels = trans_format("log10", math_format(10^.x)))+
+  theme(legend.position = "none")
 
 # Plot for the relative computation time
 dftemp_5_rel <- speedsim1[speedsim1$factors == 5, ]
 f5_rel <- ggplot(dftemp_5_rel, aes(x=nu, y=diff, group=sparsity, linetype = factor(sparsity)))+
   geom_line()+
   geom_point()+
-  scale_linetype_discrete(name="Sparsity level", labels=c("5%", "25%"))+
+  scale_linetype_discrete(name="Sparsity level", labels=c("95%", "75%"))+
   scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x),
                 labels = trans_format("log10", math_format(10^.x))) +
-  labs(x ="Number of users", y = "% Difference interation speed")+
-  theme_bw()
-f5_rel
+  labs(x ="Number of users", y = "% Difference iteration time")+
+  theme_bw()+
+  theme(legend.position = "none")
 
-# Making a figures for runs with 5 factors
+
+# Making a figures for runs with 20 factors
 dftemp_20 <- speedsim1[speedsim1$factors == 20, ]
 dftemp_20_abs <- melt(dftemp_20, id = c("nu", "sparsity") , measure = c("meanTimeFast", "meanTimeSlow"))
 
@@ -686,36 +688,36 @@ f20_abs1 <- ggplot(dftemp_20_abs, aes(x=nu, y=value, group=interaction(variable,
   geom_point()+
   scale_color_manual(name="Matrix type", labels=c("Sparse + LR", "Full matrix"),
                      values=cols)+
-  scale_linetype_discrete(name="Sparsity level", labels=c("5%", "25%"))+
+  scale_linetype_discrete(name="Sparsity level", labels=c("95%", "75%"))+
   scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x),
                 labels = trans_format("log10", math_format(10^.x))) +
-  labs(x ="Number of users", y = "Iteration speed")+
-  theme_bw()
-
-
+  labs(x ="Number of users", y = "Iteration time")+
+  theme_bw()+
+  theme(legend.position = c(0.3, 0.6))
 
 f20_abs2 <- f20_abs1 +
   scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
-                labels = trans_format("log10", math_format(10^.x)))
+                labels = trans_format("log10", math_format(10^.x))) +
+  theme(legend.position = "none")
 
 # Plot for the relative computation time
 dftemp_20_rel <- speedsim1[speedsim1$factors == 20, ]
 f20_rel <- ggplot(dftemp_20_rel, aes(x=nu, y=diff, group=sparsity, linetype = factor(sparsity)))+
   geom_line()+
   geom_point()+
-  scale_linetype_discrete(name="Sparsity level", labels=c("5%", "25%"))+
+  scale_linetype_discrete(name="Sparsity level", labels=c("95%", "75%"))+
   scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x),
                 labels = trans_format("log10", math_format(10^.x))) +
-  labs(x ="Number of users", y = "% Difference interation speed")+
-  theme_bw()
+  labs(x ="Number of users", y = "% Difference iteration time")+
+  theme_bw()+
+  theme(legend.position = "none")
 
 
 
 
 # Arranging in a grid
-speedgraphs <- 
-  grid.arrange(f5_abs1, f5_abs2, f5_rel, f20_abs1, f20_abs2, f20_rel, ncol = 3, nrow = 2)
-
+grid.arrange(f5_abs1, f5_abs2, f5_rel, ncol = 3, nrow = 1)
+grid.arrange(f20_abs1, f20_abs2, f20_rel, ncol = 3, nrow = 1)
 
 
 #############
