@@ -508,7 +508,22 @@ parEstSlow <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=N
   return(output)
 }
 
-
+calcGrad <- function(df, lambda, alpha, beta, C, D) {
+  # Take 10% of the data
+  df_small <- data.frame(df[sample(nrow(df), floor(0.1*nrow(df)), replace = FALSE), c("USERID_ind", "OFFERID_ind", "CLICK")])
+  
+  df_small$difference <- df_small$CLICK - mu(alpha[,df_small$USERID_ind] + beta[,df_small$OFFERID_ind] + C[,df_small$USERID_ind]%*%t(D[,df_small$OFFERID_ind]))
+  deriv_alpha <- df_small %>% group_by(USERID_ind) %>% summarise(deriv_alpha = sum(difference)) %>% dplyr::select(deriv_alpha) %>% ungroup()
+  deriv_beta <- df_small %>% group_by(OFFERID_ind) %>% summarise(deriv_beta = sum(difference)) %>% dplyr::select(deriv_beta) %>% ungroup()
+  
+  mult_di <- df_small$difference * t(D[,df_small$OFFERID_ind])
+  mult_cu <- df_small$difference * t(C[,df_small$USERID_ind])
+  
+  deriv_cu <- df_small %>% group_by(df_small$USERID_ind) %>% summarise(sumI = sum(mult)) %>% ungroup()
+  deriv_cu <- deriv_cu - lambda*C[,deriv_cu$USERID_ind]
+  
+  
+}
 
 speedSim <- function(NU, NI, SPARSITY, FACTORS, file="speedSim.xlsx"){
   # Initialize a multidimensional output array
@@ -778,12 +793,13 @@ df <- df %>% mutate(USERID_ind = group_indices(., factor(USERID, levels = unique
 proportions <- c(0.2, 0.4, 0.6, 0.8, 1)
 subsets <- floor(proportions*nrow(df))
 
-FACTORS <- c(5, 10, 15)
-LAMBDA <- c(5, 10, 15)
-iter <- 11 # So we still have the average over 10 iterations after dropping the first one
+subset <- subsets[1]
+FACTORS <- c(5, 10)
+LAMBDA <- c(5, 10)
+iter <- 6 # So we still have the average over 10 iterations after dropping the first one
 initType <- 2
 llh <- FALSE
 rmse <- FALSE
 
 # compareSpeed uses the parEst in this file!
-speedTest <- compareSpeed(df, subsets, FACTORS, LAMBDA, iter, initType, llh, rmse)
+speedTest <- compareSpeed(df, subset, FACTORS, LAMBDA, iter, initType, llh, rmse)
