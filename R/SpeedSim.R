@@ -566,6 +566,38 @@ speedSim <- function(NU, NI, SPARSITY, FACTORS, file="speedSim.xlsx"){
   return(output)
 }
 
+
+#' Function for comparing speeds of estimating parameters on different subset of data
+#'
+#' @param df entire dataframe
+#' @param subsets list of subset sizes used
+#' @param ... parameters for parEst
+#'
+#' @return
+compareSpeed <- function(df, subsets, FACTORS, LAMBDA, ...) {
+  total <- data.frame(matrix(nrow = length(subsets)*length(FACTORS)*length(LAMBDA), ncol = 4))
+  colnames(total) <- c("subset", "factor", "lambda", "meanTime")
+  
+  row <- 1
+  for (i in subsets) { 
+    df_sub <- df[c(1:i), c("USERID_ind", "MailOffer", "CLICK")]
+    df_sub <- df_sub %>% 
+      mutate(OFFERID_ind = group_indices(., factor(MailOffer, levels = unique(MailOffer))))
+    
+    for (f in FACTORS) {
+      for (l in LAMBDA) {
+        total$subset[row] <- i
+        total$factor[row] <- f
+        total$lambda[row] <- l
+        total$meanTime[row] = parEst(df_sub[, c("USERID_ind", "OFFERID_ind", "CLICK")], factors = f, lambda = l, ...)$meanTime
+        row = row + 1
+      }
+    }
+  }
+  total <- total[order(total$subset, total$factor, total$lambda)]
+  return(total)
+}
+
 #### Run it ------------------------------------------------------------------------------
 
 debug(makeData)
@@ -613,4 +645,24 @@ output <- speedSim(NU, NI, SPARSITY, FACTORS, file="speedsim1.xlsx")
 
 debug(speedSim)
 
+#### Compare speeds ----------------------------------------------------------------------
 
+# Disable scientific notation
+options(scipen=999)
+
+df <- readRDS("df_obs.RDS")
+df <- df[order(df$USERID, df$MailOffer), c("USERID", "MailOffer", "CLICK")]
+df <- df %>% mutate(USERID_ind = group_indices(., factor(USERID, levels = unique(USERID))))
+
+proportions <- c(0.2, 0.4, 0.6, 0.8, 1)
+subsets <- floor(proportions*nrow(df))
+
+FACTORS <- c(5, 10, 15)
+LAMBDA <- c(5, 10, 15)
+iter <- 11 # So we still have the average over 10 iterations after dropping the first one
+initType <- 2
+llh <- FALSE
+rmse <- FALSE
+
+# compareSpeed uses the parEst in this file!
+speedTest <- compareSpeed(df, subsets, FACTORS, LAMBDA, iter, initType, llh, rmse)
