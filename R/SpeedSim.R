@@ -18,6 +18,8 @@ library(gridExtra)
 sourceCpp("gammaui.cpp")
 source("MajorizationFunctions.R")
 
+norm_vec <- function(x) sqrt(sum(x^2))
+
 makeData <- function(nu, ni, sparsity, f=2, alpha = NULL, beta=NULL, C=NULL, D=NULL,
                      model=T){
   
@@ -91,7 +93,8 @@ makeData <- function(nu, ni, sparsity, f=2, alpha = NULL, beta=NULL, C=NULL, D=N
 #' @return returns parameters alpha, beta, C and D
 #' 
 parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL, 
-                   epsilon=NULL, a_in = NULL, b_in = NULL, C_in = NULL, D_in = NULL) {
+                   epsilon=NULL, a_in = NULL, b_in = NULL, C_in = NULL, D_in = NULL,
+                   gradient = FALSE) {
   names(df)[1:3] <- c("USERID_ind", "OFFERID_ind", "CLICK")
   
   # Initialization (including centering)
@@ -121,7 +124,7 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
   # Initialize iteration number
   run <- 1
   
-  if (!is.null(epsilon) || llh) {
+  if ((!is.null(epsilon) & !gradient) || llh) {
     deviance_new <- sum(logllh1(gamma_y1)) + sum(logllh0(gamma_y0))
     objective_new <- deviance_new + 
       lambda/2 * norm(C, type="F")^2 + lambda/2 * norm(D, type="F")^2
@@ -232,11 +235,11 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     gamma_y1 <- get_gamma0(y1[,1], y1[,2], alpha, beta, C, D)
     gamma_y0 <- get_gamma0(y0[,1], y0[,2], alpha, beta, C, D)
     
-    if (!is.null(epsilon)) {
+    if (!is.null(epsilon) & !gradient) {
       deviance_old <- deviance_new
       objective_old <- objective_new
     }
-    if (!is.null(epsilon) || llh) {
+    if ((!is.null(epsilon) & !gradient) || llh) {
       deviance_new <- sum(logllh1(gamma_y1)) + sum(logllh0(gamma_y0))
       objective_new <- deviance_new +
         lambda / 2 * norm(C, type = "F") ^ 2 + lambda / 2 * norm(D, type = "F") ^ 2
@@ -259,12 +262,18 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     }
     toc()
     
-    if (!is.null(epsilon)) {
+    if (!is.null(epsilon) & !gradient) {
       if (!is.infinite(objective_new) && !is.infinite(objective_old)) {
         print(paste("Iter", (run-1), "Change in deviance is", (deviance_new-deviance_old)/deviance_old, sep=" "))
         print((objective_new-objective_old)/objective_old)
         if (abs((objective_new-objective_old)/objective_old) < epsilon) break
       }
+    }
+    
+    if (!is.null(epsilon) & gradient) {
+      normParam <- normGrad(df, lambda, alpha, beta, C, D)
+      print(normParam)
+      if (normParam < epsilon) break
     }
     
     # Keeping track of the number of factors
@@ -508,21 +517,30 @@ parEstSlow <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=N
   return(output)
 }
 
-calcGrad <- function(df, lambda, alpha, beta, C, D) {
-  # Take 10% of the data
-  df_small <- data.frame(df[sample(nrow(df), floor(0.1*nrow(df)), replace = FALSE), c("USERID_ind", "OFFERID_ind", "CLICK")])
+normGrad <- function(df, lambda, alpha, beta, C, D, prop = 0.1) {
+  # Take sample of the data
+  df_small <- data.frame(df[sample(nrow(df), floor(prop*nrow(df)), replace = FALSE), c("USERID_ind", "OFFERID_ind", "CLICK")])
   
-  df_small$difference <- df_small$CLICK - mu(alpha[,df_small$USERID_ind] + beta[,df_small$OFFERID_ind] + C[,df_small$USERID_ind]%*%t(D[,df_small$OFFERID_ind]))
+  gamma <- get_gamma0(df_small$USERID_ind, df_small$OFFERID_ind, alpha, beta, C, D)
+  df_small$difference <- df_small$CLICK - mu(gamma)
+  
+  # Get the gradients of alpha and beta
   deriv_alpha <- df_small %>% group_by(USERID_ind) %>% summarise(deriv_alpha = sum(difference)) %>% dplyr::select(deriv_alpha) %>% ungroup()
   deriv_beta <- df_small %>% group_by(OFFERID_ind) %>% summarise(deriv_beta = sum(difference)) %>% dplyr::select(deriv_beta) %>% ungroup()
   
-  mult_di <- df_small$difference * t(D[,df_small$OFFERID_ind])
-  mult_cu <- df_small$difference * t(C[,df_small$USERID_ind])
+  # Get gradient of C (not vectorized, but that doesn't matter since we take the norm anyway)
+  mult_C <- tcrossprod(df_small$difference, rep(1, ncol(D))) * D[df_small$OFFERID_ind,]
+  mult_C <- data.frame(cbind("USERID_ind" = df_small$USERID_ind, mult_C))
+  deriv_C <- mult_C %>% group_by(USERID_ind) %>% summarise_all(sum) %>% ungroup()
+  deriv_C <- as.matrix(deriv_C[,-1] - lambda*C[deriv_C$USERID_ind, -1])
   
-  deriv_cu <- df_small %>% group_by(df_small$USERID_ind) %>% summarise(sumI = sum(mult)) %>% ungroup()
-  deriv_cu <- deriv_cu - lambda*C[,deriv_cu$USERID_ind]
+  # Get gradient of D (not vectorized, but that doesn't matter since we take the norm anyway)
+  mult_D <- tcrossprod(df_small$difference, rep(1, ncol(C))) * C[df_small$USERID_ind,]
+  mult_D <- data.frame(cbind("OFFERID_ind" = df_small$OFFERID_ind, mult_D))
+  deriv_D <- mult_D %>% group_by(OFFERID_ind) %>% summarise_all(sum) %>% ungroup()
+  deriv_D <- as.matrix(deriv_D[,-1] - lambda*D[deriv_D$OFFERID_ind, -1])
   
-  
+  return(norm_vec(deriv_alpha) + norm_vec(deriv_beta) + norm(deriv_C, type="F") + norm(deriv_D, type="F"))
 }
 
 speedSim <- function(NU, NI, SPARSITY, FACTORS, file="speedSim.xlsx"){
