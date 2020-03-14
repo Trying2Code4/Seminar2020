@@ -252,18 +252,35 @@ toc()
 # Final predictions ----------------------------------------------------------------------
 # If you want predictions for the final set
 
-# Import test and train set
-df_train <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_train")
-df_test <- readRDS("/Users/colinhuliselan/Documents/Master/Seminar/Code/SeminarR/df_test")
+df_obs <- read_delim("/Users/colinhuliselan/Documents/Master/Seminar/SharedData/df_obs.csv",
+                     ",", escape_double = FALSE, trim_ws = TRUE)
+df_game <- read_delim("/Users/colinhuliselan/Documents/Master/Seminar/SharedData/df_game.csv",
+                     ",", escape_double = FALSE, trim_ws = TRUE)
 
-#Caclulcating parameters
-#Hyperparameters
-factors <- 2
-lambda <- 1
+df_obs <- df_obs[, c("USERID", "MailOffer", "CLICK")]
+df_game <- df_game[, c("USERID", "MailOffer", "CLICK")]
 
-pars <- parEst(df_train[ ,c("USERID_ind", "OFFERID_ind", "CLICK")], factors, lambda, iter, initType)
+prep <- prepData(df_obs, df_game, onlyVar = FALSE)
+df_obs <- prep$df_train
+df_game <- prep$df_test
+globalMean <- prep$globalMean
 
-gameResults <- getPredict(df_test, pars$alpha, pars$beta, pars$C, pars$D)
+# Hyperparameters
+factors <- 10
+lambda <- 10
+iter <- 10000
+initType <- 2
+epsilon <- 1e-06
+
+# Estimate parameters
+pars <- parEst(df_obs[, c("USERID_ind", "OFFERID_ind", "CLICK")], factors, lambda, iter, 
+               initType, llh=FALSE, rmse=FALSE, epsilon=epsilon)
+
+# Get predictions
+gameResults <- getPredict(df_game[, c("USERID_ind", "OFFERID_ind", "CLICK",
+                                      "ratioU", "ratioO", "prediction", "USERID", "MailOffer")],
+                          pars$alpha, pars$beta, pars$C, pars$D)
+gameResults$predictions[is.na(gameResults$predictions)] <- globalMean
 
 # Preparing data for mate ----------------------------------------------------------------
 # This is how you should import the data.

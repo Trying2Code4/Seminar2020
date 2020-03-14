@@ -116,7 +116,7 @@ initChoose <- function(df, factors, lambda, initType, a_in = NULL, b_in = NULL,
     user_avg <- df %>%
       group_by(USERID_ind) %>%
       summarize(meanCLICK = mean(CLICK)) %>%
-      select(meanCLICK)
+      dplyr::select(meanCLICK)
     
     # Give some value when this is 0 or 1 (otherwise gamma -> inf)
     user_avg[user_avg == 0] <- 0.00001 # THINK ABOUT THIS
@@ -129,7 +129,7 @@ initChoose <- function(df, factors, lambda, initType, a_in = NULL, b_in = NULL,
     offer_avg <- df %>%
       group_by(OFFERID_ind) %>%
       summarize(meanCLICK = mean(CLICK)) %>%
-      select(meanCLICK)
+      dplyr::select(meanCLICK)
     
     # Give some value when this is 0 or 1 (otherwise gamma -> inf)
     offer_avg[offer_avg == 0] <- 0.00001 # THINK ABOUT THIS
@@ -356,7 +356,7 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     
     if (!is.null(epsilon)) {
       if (!is.infinite(objective_new) && !is.infinite(objective_old)) {
-        print(paste("Iter", (run-1), "Change in deviance is", (deviance_new-deviance_old)/deviance_old, sep=" "))
+        print(paste("Iter", (run-1), "Likelihood", objective_new, sep=" "))
         print((objective_new-objective_old)/objective_old)
         if (abs((objective_new-objective_old)/objective_old) < epsilon) break
       }
