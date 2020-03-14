@@ -7,32 +7,19 @@ library(RcppArmadillo)
 library(Rcpp)
 library(ggplot2)
 library(openxlsx)
+library(reshape2)
+require(MASS) # to access Animals data sets
+require(scales)
+library(gridExtra)
+
 
 # sourceCpp("/Users/colinhuliselan/Documents/Master/Seminar/Seminar2020_V2/R/gammaui.cpp")
 #sourceCpp("~/Dropbox/Uni/Master_Econometrie/Blok_3/Seminar2020/R/gammaui.cpp")
 sourceCpp("gammaui.cpp")
 source("MajorizationFunctions.R")
 
-makeData <- function(nu, ni, sparsity, f=2, alpha = NULL, beta=NULL, C=NULL, D=NULL){
-  # If not predetermined udnerlying model is given
-  if (is.null(alpha)){
-    alpha <- runif(nu, min=-5, max=0)
-  }
-  if (is.null(beta)){
-    beta <- runif(ni, min=-5, max=0)
-  }
-  if (is.null(C)){
-    C <- matrix(rnorm(nu * f, 0, 2), nu, f)
-  }
-  if (is.null(D)){
-    D <- matrix(rnorm(ni * f, 0, 2), ni, f)
-  }
-  
-  low_rankC <- cbind(C, alpha, rep(1, nu))
-  low_rankD <- cbind(D, rep(1,ni), beta)
-  
-  gamma <- low_rankC %*% t(low_rankD) + matrix(rnorm(nu*ni, 0, 1), nu, ni)
-  probability <- exp(gamma) / (1 + exp(gamma))
+makeData <- function(nu, ni, sparsity, f=2, alpha = NULL, beta=NULL, C=NULL, D=NULL,
+                     model=T){
   
   # Create a train subset with a certain sparsity level
   # Make indice matrices
@@ -53,9 +40,33 @@ makeData <- function(nu, ni, sparsity, f=2, alpha = NULL, beta=NULL, C=NULL, D=N
   # Combine diag and remainder
   df <- rbind(df_diag, df_nodiag)
   
-  # And the corresponding clicks
-  df$CLICK <- probability[as.matrix(df[ , c("USERID", "OFFERID")])]
-  df$CLICK <- as.numeric(df$CLICK > 0.5)
+  if (model){
+    # If not predetermined udnerlying model is given
+    if (is.null(alpha)){
+      alpha <- runif(nu, min=-5, max=0)
+    }
+    if (is.null(beta)){
+      beta <- runif(ni, min=-5, max=0)
+    }
+    if (is.null(C)){
+      C <- matrix(rnorm(nu * f, 0, 2), nu, f)
+    }
+    if (is.null(D)){
+      D <- matrix(rnorm(ni * f, 0, 2), ni, f)
+    }
+    
+    low_rankC <- cbind(C, alpha, rep(1, nu))
+    low_rankD <- cbind(D, rep(1,ni), beta)
+    
+    gamma <- low_rankC %*% t(low_rankD) + matrix(rnorm(nu*ni, 0, 1), nu, ni)
+    probability <- exp(gamma) / (1 + exp(gamma))
+    
+    # And the corresponding clicks
+    df$CLICK <- probability[as.matrix(df[ , c("USERID", "OFFERID")])]
+    df$CLICK <- as.numeric(df$CLICK > 0.5)
+  } else{
+    df$CLICK <- rbinom(n = nrow(df), size = 1, prob = 0.05)
+  }
   
   return(df)
 }
@@ -531,7 +542,7 @@ speedSim <- function(NU, NI, SPARSITY, FACTORS, file="speedSim.xlsx"){
           
           # Run the algorithms
           lambda <- 1
-          iter <- 5
+          iter <- 6
           initType <- 2
           onlyVar <- T
           llh <- FALSE
@@ -551,7 +562,7 @@ speedSim <- function(NU, NI, SPARSITY, FACTORS, file="speedSim.xlsx"){
                                         ", sparsity = ", sparsity, ", factors = ", factors,
                                         sep = "")
           output$meanTimeFast[row] <- fast$meanTime
-          output$meanTimeSlow[row] <- fast$meanTime
+          output$meanTimeSlow[row] <- slow$meanTime
           
           write.xlsx(output, file = file)
           
@@ -602,23 +613,34 @@ compareSpeed <- function(df, subsets, FACTORS, LAMBDA, ...) {
 
 debug(makeData)
 # Create data
-df <- makeData(nu=10000, ni=100, sparsity=0.05)
+tic("hard model")
+df <- makeData(nu=10^6, ni=100, sparsity=0.05, model=T)
+toc()
+
+tic("simple model")
+df <- makeData(nu=10^6, ni=100, sparsity=0.05, model=F)
+toc()
+
+# Or load data
+df <- readRDS("df_train.RDS")
+df <- df[, c("USERID", "MailOffer", "CLICK")]
+split <- trainTest(df, onlyVar)
+df <- split$df_train[ ,c("USERID_ind", "OFFERID_ind", "CLICK")]
 
 length(unique(df$USERID))
 length(unique(df$OFFERID))
-
 nrow(unique(df))
 
-length(unique(t(df)))
 
 # Run the algorithms
+factors <- 5
 lambda <- 1
 iter <- 5
 initType <- 2
 onlyVar <- T
 llh <- FALSE
 rmse <- FALSE
-epsilon <- 0.001
+epsilon <- 0.00001
 
 
 set.seed(123)
@@ -636,14 +658,113 @@ debug(parEstSlow)
 
 
 #### Run the simulation ------------------------------------------------------------------
-NU <- c(100, 1000, 10000, 100000, 1000000)
+NU <- round(c(10^2, 10^2.5, 10^3, 10^3.5, 10^4, 10^4.5, 10^5, 10^5.5, 10^6))
 NI <- c(100)
-SPARSITY <- c(0.05)
-FACTORS <- c(5, 10, 15, 20)
+SPARSITY <- c(0.05, 0.25)
+FACTORS <- c(5, 20)
 
-output <- speedSim(NU, NI, SPARSITY, FACTORS, file="speedsim1.xlsx")
+speedsim1 <- speedSim(NU, NI, SPARSITY, FACTORS, file="speedsim1.xlsx")
+speedsim1 <- read.xlsx("speedsim1.xlsx")
 
-debug(speedSim)
+
+#### Create output -----------------------------------------------------------------------
+# Create a percentage difference
+speedsim1$diff <- (speedsim1$meanTimeSlow - speedsim1$meanTimeFast)/speedsim1$meanTimeFast * 100
+
+# Making a figures for runs with 5 factors
+dftemp_5 <- speedsim1[speedsim1$factors == 5, ]
+dftemp_5_abs <- melt(dftemp_5, id = c("nu", "sparsity") , measure = c("meanTimeFast", "meanTimeSlow"))
+
+# The plots for the actual comp times
+cols <- c("meanTimeFast" = "black", "meanTimeSlow" = "#bfbdbd")
+f5_abs1 <- ggplot(dftemp_5_abs, aes(x=nu, y=value, group=interaction(variable, sparsity),
+                                colour = variable, linetype = factor(sparsity)))+
+  geom_line()+
+  geom_point()+
+  scale_color_manual(name="Matrix type", labels=c("Sparse + LR", "Full matrix"),
+                     values=cols)+
+  scale_linetype_discrete(name="Sparsity level", labels=c("5%", "25%"))+
+  scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x),
+                labels = trans_format("log10", math_format(10^.x))) +
+  labs(x ="Number of users", y = "Iteration speed")+
+  theme(legend.position = 'none')+
+  theme_bw()
+
+f5_abs2 <- f5_abs1 +
+  scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
+                labels = trans_format("log10", math_format(10^.x)))
+
+# Plot for the relative computation time
+dftemp_5_rel <- speedsim1[speedsim1$factors == 5, ]
+f5_rel <- ggplot(dftemp_5_rel, aes(x=nu, y=diff, group=sparsity, linetype = factor(sparsity)))+
+  geom_line()+
+  geom_point()+
+  scale_linetype_discrete(name="Sparsity level", labels=c("5%", "25%"))+
+  scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x),
+                labels = trans_format("log10", math_format(10^.x))) +
+  labs(x ="Number of users", y = "% Difference interation speed")+
+  theme_bw()
+f5_rel
+
+# Making a figures for runs with 5 factors
+dftemp_20 <- speedsim1[speedsim1$factors == 20, ]
+dftemp_20_abs <- melt(dftemp_20, id = c("nu", "sparsity") , measure = c("meanTimeFast", "meanTimeSlow"))
+
+# The plots for the actual comp times
+cols <- c("meanTimeFast" = "black", "meanTimeSlow" = "#bfbdbd")
+f20_abs1 <- ggplot(dftemp_20_abs, aes(x=nu, y=value, group=interaction(variable, sparsity),
+                                    colour = variable, linetype = factor(sparsity)))+
+  geom_line()+
+  geom_point()+
+  scale_color_manual(name="Matrix type", labels=c("Sparse + LR", "Full matrix"),
+                     values=cols)+
+  scale_linetype_discrete(name="Sparsity level", labels=c("5%", "25%"))+
+  scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x),
+                labels = trans_format("log10", math_format(10^.x))) +
+  labs(x ="Number of users", y = "Iteration speed")+
+  theme_bw()
+
+
+
+f20_abs2 <- f20_abs1 +
+  scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
+                labels = trans_format("log10", math_format(10^.x)))
+
+# Plot for the relative computation time
+dftemp_20_rel <- speedsim1[speedsim1$factors == 20, ]
+f20_rel <- ggplot(dftemp_20_rel, aes(x=nu, y=diff, group=sparsity, linetype = factor(sparsity)))+
+  geom_line()+
+  geom_point()+
+  scale_linetype_discrete(name="Sparsity level", labels=c("5%", "25%"))+
+  scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x),
+                labels = trans_format("log10", math_format(10^.x))) +
+  labs(x ="Number of users", y = "% Difference interation speed")+
+  theme_bw()
+
+
+
+
+# Arranging in a grid
+speedgraphs <- 
+  grid.arrange(f5_abs1, f5_abs2, f5_rel, f20_abs1, f20_abs2, f20_rel, ncol = 3, nrow = 2)
+
+
+
+#############
+df <- speedsim1
+dftemp05_5 <- df[(df$sparsity == 0.05 & df$factors == 5), c("nu", "meanTimeFast", "meanTimeSlow", "diff")]
+colnames(dftemp05_5) <- c("Number of users", "S+LR, 5% sparsity", "Full, 5% sparsity", "Difference, 5% sparsity")
+dftemp05_20 <- df[(df$sparsity == 0.05 & df$factors == 20), c("nu", "meanTimeFast", "meanTimeSlow", "diff")]
+colnames(dftemp05_20) <- c("Number of users", "S+LR, 5% sparsity", "Full, 5% sparsity", "Difference, 5% sparsity")
+dftemp25_5 <- df[(df$sparsity == 0.25 & df$factors == 5), c("meanTimeFast", "meanTimeSlow", "diff")]
+colnames(dftemp25_5) <- c("S+LR, 25% sparsity", "Full, 25% sparsity", "Difference, 25% sparsity")
+dftemp25_20 <- df[(df$sparsity == 0.25 & df$factors == 20), c("meanTimeFast", "meanTimeSlow", "diff")]
+colnames(dftemp25_20) <- c("S+LR, 25% sparsity", "Full, 25% sparsity", "Difference, 25% sparsity")
+
+
+dftemp_5 <- speedsim1[speedsim1$factors == 5, ]
+dftemp_5 <- melt(dftemp_5, id = c("nu", "sparsity") , measure = c("meanTimeFast", "meanTimeSlow"))
+
 
 #### Compare speeds ----------------------------------------------------------------------
 
