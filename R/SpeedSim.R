@@ -94,7 +94,7 @@ makeData <- function(nu, ni, sparsity, f=2, alpha = NULL, beta=NULL, C=NULL, D=N
 #' 
 parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL, 
                    epsilon=NULL, a_in = NULL, b_in = NULL, C_in = NULL, D_in = NULL,
-                   gradient = FALSE) {
+                   gradient = FALSE, ...) {
   names(df)[1:3] <- c("USERID_ind", "OFFERID_ind", "CLICK")
   
   # Initialization (including centering)
@@ -218,7 +218,7 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     H_slr_rowandcolmean <- splr(sparse, low_rankC, low_rankD)
     
     # Retrieve C and D from the svd.als function
-    results <- svd.als(H_slr_rowandcolmean, rank.max = factors, lambda = lambda * 4, final.svd = FALSE)
+    results <- svd.als(H_slr_rowandcolmean, rank.max = factors, lambda = lambda * 4, ...)
     
     # Updates
     alpha <- newalpha
@@ -884,10 +884,10 @@ set.seed(0)
 MM_grad_small <- parEst(train[c(1:10000), ], factors, lambda, iter = 10, initType, llh=TRUE, rmse=FALSE, epsilon=epsilon, gradient=TRUE)
 
 set.seed(0)
-MM_grad <- parEst(train, factors, lambda, iter, initType, llh=TRUE, rmse=FALSE, epsilon=epsilon, gradient=TRUE)
+MM_grad <- parEst(train, factors, lambda, iter, initType, llh=TRUE, rmse=FALSE, epsilon=epsilon, gradient=TRUE, final.svd = TRUE)
 
 set.seed(0)
-MM_grad_nofinal <- parEst(train, factors, lambda, iter, initType, llh=TRUE, rmse=FALSE, epsilon=epsilon, gradient=TRUE)
+MM_grad_nofinal <- parEst(train, factors, lambda, iter, initType, llh=TRUE, rmse=FALSE, epsilon=epsilon, gradient=TRUE, final.svd = FALSE)
 
 par(mfrow=c(2,2))
 plot(MM_grad$gradient[1,],
