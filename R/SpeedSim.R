@@ -157,6 +157,12 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     rmse_it <- NA
   }
   
+  if (gradient) {
+    gradient_all <- matrix(nrow = 4, ncol = iter)
+  } else {
+    gradient_all <- NA
+  }
+  
   # Keeping track of the number of factors
   factors_all <- rep(NA, (iter+1))
   factors_all[run] <- factors
@@ -212,7 +218,7 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     H_slr_rowandcolmean <- splr(sparse, low_rankC, low_rankD)
     
     # Retrieve C and D from the svd.als function
-    results <- svd.als(H_slr_rowandcolmean, rank.max = factors, lambda = lambda * 4)
+    results <- svd.als(H_slr_rowandcolmean, rank.max = factors, lambda = lambda * 4, final.svd = FALSE)
     
     # Updates
     alpha <- newalpha
@@ -270,10 +276,14 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
       }
     }
     
-    if (!is.null(epsilon) & gradient) {
+    if (gradient) {
       normParam <- normGrad(df, lambda, alpha, beta, C, D)
-      print(normParam)
-      if (normParam < epsilon) break
+      gradient_all[, run-1] <- normParam
+    }
+    
+    if (!is.null(epsilon) & gradient) {
+      print(sum(normParam))
+      if (sum(normParam) < epsilon) break
     }
     
     # Keeping track of the number of factors
@@ -292,7 +302,7 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
   
   output <- list("alpha" = alpha, "beta" = beta, "C" = C, "D" = D, "objective" = objective_all, 
                  "deviance" = deviance_all, "rmse" = rmse_it, "run" = run, "factors" = factors_all,
-                 "par_track" = par_track, "meanTime" = meanTime)
+                 "par_track" = par_track, "meanTime" = meanTime, "gradient" = gradient_all)
   return(output)
 }
 
@@ -540,7 +550,7 @@ normGrad <- function(df, lambda, alpha, beta, C, D, prop = 0.1) {
   deriv_D <- mult_D %>% group_by(OFFERID_ind) %>% summarise_all(sum) %>% ungroup()
   deriv_D <- as.matrix(deriv_D[,-1] - lambda*D[deriv_D$OFFERID_ind, ])
   
-  return(norm_vec(deriv_alpha) + norm_vec(deriv_beta) + norm(deriv_C, type="F") + norm(deriv_D, type="F"))
+  return(c("norm_alpha" = norm_vec(deriv_alpha), "norm_beta" = norm_vec(deriv_beta), "norm_C" = norm(deriv_C, type="F"), "norm_D" = norm(deriv_D, type="F")))
 }
 
 speedSim <- function(NU, NI, SPARSITY, FACTORS, file="speedSim.xlsx"){
@@ -824,4 +834,79 @@ rmse <- FALSE
 # compareSpeed uses the parEst in this file!
 speedTest <- compareSpeed(df, subset, FACTORS, LAMBDA, iter, initType, llh, rmse)
 
+# Checking gradients for previous output ---------------------------------------------------
+
+# 1.
+df_train <- readRDS("df_train")
+df_val <- readRDS("df_val")
+
+prep <- prepData(df_train, df_val, onlyVar = TRUE)
+train <- prep$df_train
+
+parEst_f5_l5 <- readRDS("parEst_f5_l5.RDS")
+
+# Around 1930
+grad_f5_l5 <- normGrad(train, parEst_f5_l5$lambda, parEst_f5_l5$parEst$alpha, parEst_f5_l5$parEst$beta, parEst_f5_l5$parEst$C, parEst_f5_l5$parEst$D)
+
+# 2.
+df_obs <- readRDS("df_obs.RDS")
+df_train <- df_obs[df_obs$res == 0, c("USERID", "MailOffer", "CLICK")]
+df_res <- df_obs[df_obs$res == 1, c("USERID", "MailOffer", "CLICK")]
+
+prep <- prepData(df_train, df_res, onlyVar = FALSE)
+train <- prep$df_train
+
+outputRes <- readRDS("outputRes.RDS")
+
+# Around 3050
+grad_f10_l10 <- normGrad(train, lambda = 10, outputRes$parameters$alpha, outputRes$parameters$beta, outputRes$parameters$C, outputRes$parameters$D)
+
+
 # Algorithm using gradients ----------------------------------------------------------------
+
+factors <- 5
+lambda <- 5
+iter <- 250
+initType <- 2
+epsilon <- 1e-06
+
+df_train <- readRDS("Data/df_train")
+df_train <- df_train[, c("USERID", "MailOffer", "CLICK")]
+
+df_val <- readRDS("Data/df_val")
+df_val <- df_val[, c("USERID", "MailOffer", "CLICK")]
+
+prep <- prepData(df_train, df_val, onlyVar = TRUE)
+train <- prep$df_train[, c("USERID_ind", "OFFERID_ind", "CLICK")]
+
+# Estimate parameters
+set.seed(0)
+MM_grad_small <- parEst(train[c(1:10000), ], factors, lambda, iter = 10, initType, llh=TRUE, rmse=FALSE, epsilon=epsilon, gradient=TRUE)
+
+set.seed(0)
+MM_grad <- parEst(train, factors, lambda, iter, initType, llh=TRUE, rmse=FALSE, epsilon=epsilon, gradient=TRUE)
+
+set.seed(0)
+MM_grad_nofinal <- parEst(train, factors, lambda, iter, initType, llh=TRUE, rmse=FALSE, epsilon=epsilon, gradient=TRUE)
+
+par(mfrow=c(2,2))
+plot(MM_grad$gradient[1,],
+     col="blue", type = "l", lwd=2, ylab="Gradient of alpha", xlab="Iteration")
+plot(MM_grad$gradient[2,],
+     col="green", type = "l", lwd=2, ylab="Gradient of beta", xlab="Iteration")
+plot(MM_grad$gradient[3,],
+     col="red", type = "l", lwd=2, ylab="Gradient of C", xlab="Iteration")
+plot(MM_grad$gradient[4,],
+     col="orange", type = "l", lwd=2, ylab="Gradient of D", xlab="Iteration")
+par(mfrow=c(1,1))
+
+par(mfrow=c(2,2))
+plot(MM_grad$gradient[1,],
+     col="blue", type = "l", lwd=2, ylab="Gradient of alpha", xlab="Iteration")
+plot(MM_grad$gradient[2,],
+     col="green", type = "l", lwd=2, ylab="Gradient of beta", xlab="Iteration")
+plot(MM_grad$gradient[3,],
+     col="red", type = "l", lwd=2, ylab="Gradient of C", xlab="Iteration")
+plot(MM_grad$gradient[4,],
+     col="orange", type = "l", lwd=2, ylab="Gradient of D", xlab="Iteration")
+par(mfrow=c(1,1))
