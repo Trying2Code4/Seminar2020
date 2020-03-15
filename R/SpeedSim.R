@@ -18,7 +18,7 @@ library(gridExtra)
 sourceCpp("gammaui.cpp")
 source("MajorizationFunctions.R")
 
-norm_vec <- function(x) sqrt(sum(x^2))
+norm_vec <- function(x) {sqrt(sum(x^2))}
 
 makeData <- function(nu, ni, sparsity, f=2, alpha = NULL, beta=NULL, C=NULL, D=NULL,
                      model=T){
@@ -532,13 +532,13 @@ normGrad <- function(df, lambda, alpha, beta, C, D, prop = 0.1) {
   mult_C <- tcrossprod(df_small$difference, rep(1, ncol(D))) * D[df_small$OFFERID_ind,]
   mult_C <- data.frame(cbind("USERID_ind" = df_small$USERID_ind, mult_C))
   deriv_C <- mult_C %>% group_by(USERID_ind) %>% summarise_all(sum) %>% ungroup()
-  deriv_C <- as.matrix(deriv_C[,-1] - lambda*C[deriv_C$USERID_ind, -1])
+  deriv_C <- as.matrix(deriv_C[,-1] - lambda*C[deriv_C$USERID_ind, ])
   
   # Get gradient of D (not vectorized, but that doesn't matter since we take the norm anyway)
   mult_D <- tcrossprod(df_small$difference, rep(1, ncol(C))) * C[df_small$USERID_ind,]
   mult_D <- data.frame(cbind("OFFERID_ind" = df_small$OFFERID_ind, mult_D))
   deriv_D <- mult_D %>% group_by(OFFERID_ind) %>% summarise_all(sum) %>% ungroup()
-  deriv_D <- as.matrix(deriv_D[,-1] - lambda*D[deriv_D$OFFERID_ind, -1])
+  deriv_D <- as.matrix(deriv_D[,-1] - lambda*D[deriv_D$OFFERID_ind, ])
   
   return(norm_vec(deriv_alpha) + norm_vec(deriv_beta) + norm(deriv_C, type="F") + norm(deriv_D, type="F"))
 }
@@ -823,3 +823,5 @@ rmse <- FALSE
 
 # compareSpeed uses the parEst in this file!
 speedTest <- compareSpeed(df, subset, FACTORS, LAMBDA, iter, initType, llh, rmse)
+
+# Algorithm using gradients ----------------------------------------------------------------
