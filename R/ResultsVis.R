@@ -17,6 +17,7 @@ pred2 <- ROCR::prediction(CBF_RRprobs, pred$CLICK)
 pred3 <- ROCR::prediction(LMF_RRprobs, pred$CLICK)
 pred4 <- ROCR::prediction(Hybrids_RRprobs$H1, Hybrids_RRprobs$CLICK)
 pred5 <- ROCR::prediction(Hybrids_RRprobs$H2, Hybrids_RRprobs$CLICK)
+test
 
 perf1 <- ROCR::performance(pred1,"tpr","fpr")
 perf2 <- ROCR::performance(pred2,"tpr","fpr")
@@ -31,10 +32,19 @@ plot(perf3, colorize=FALSE, lty=3, colour="#bfbdbd", add=TRUE)
 plot(perf3, colorize=FALSE, lty=3, colour="black", add=TRUE)
 plot(perf3, colorize=FALSE, lty=3, colour="black", add=TRUE)
 
+# Getting the AUC
+perf1AUC <- ROCR::performance(pred1, "auc")
+perf2AUC <- ROCR::performance(pred2, "auc")
+perf3AUC <- ROCR::performance(pred3, "auc")
+perf4AUC <- ROCR::performance(pred4, "auc")
+perf5AUC <- ROCR::performance(pred5, "auc")
 
-
-
-
+# Putting it all in one
+predictions <- cbind(pred$prediction, CBF_RRprobs, LMF_RRprobs, Hybrids_RRprobs$H1, Hybrids_RRprobs$H2)
+labels <- cbind(pred$CLICK, pred$CLICK, pred$CLICK, Hybrids_RRprobs$CLICK, Hybrids_RRprobs$CLICK)
+predfull <- ROCR::prediction(predictions, labels)
+perffull <- ROCR::performance(predfull, "tpr", "fpr")
+plot(perffull, colorize=FALSE, lty=1, colour="#bfbdbd",)
 
 
 
