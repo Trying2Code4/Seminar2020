@@ -94,7 +94,7 @@ makeData <- function(nu, ni, sparsity, f=2, alpha = NULL, beta=NULL, C=NULL, D=N
 #' 
 parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL, 
                    epsilon=NULL, a_in = NULL, b_in = NULL, C_in = NULL, D_in = NULL,
-                   gradient = FALSE) {
+                   gradient = FALSE, ...) {
   names(df)[1:3] <- c("USERID_ind", "OFFERID_ind", "CLICK")
   
   # Initialization (including centering)
@@ -157,6 +157,12 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     rmse_it <- NA
   }
   
+  if (gradient) {
+    gradient_all <- matrix(nrow = 4, ncol = iter)
+  } else {
+    gradient_all <- NA
+  }
+  
   # Keeping track of the number of factors
   factors_all <- rep(NA, (iter+1))
   factors_all[run] <- factors
@@ -212,7 +218,7 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     H_slr_rowandcolmean <- splr(sparse, low_rankC, low_rankD)
     
     # Retrieve C and D from the svd.als function
-    results <- svd.als(H_slr_rowandcolmean, rank.max = factors, lambda = lambda * 4)
+    results <- svd.als(H_slr_rowandcolmean, rank.max = factors, lambda = lambda * 4, ...)
     
     # Updates
     alpha <- newalpha
@@ -235,11 +241,11 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     gamma_y1 <- get_gamma0(y1[,1], y1[,2], alpha, beta, C, D)
     gamma_y0 <- get_gamma0(y0[,1], y0[,2], alpha, beta, C, D)
     
-    if (!is.null(epsilon) & !gradient) {
+    if (!is.null(epsilon)) {
       deviance_old <- deviance_new
       objective_old <- objective_new
     }
-    if ((!is.null(epsilon) & !gradient) || llh) {
+    if (!is.null(epsilon) || llh) {
       deviance_new <- sum(logllh1(gamma_y1)) + sum(logllh0(gamma_y0))
       objective_new <- deviance_new +
         lambda / 2 * norm(C, type = "F") ^ 2 + lambda / 2 * norm(D, type = "F") ^ 2
@@ -262,18 +268,17 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
     }
     toc()
     
-    if (!is.null(epsilon) & !gradient) {
+    if (gradient) {
+      normParam <- normGrad(df, lambda, alpha, beta, C, D)
+      gradient_all[, run-1] <- normParam
+    }
+    
+    if (!is.null(epsilon)) {
       if (!is.infinite(objective_new) && !is.infinite(objective_old)) {
         print(paste("Iter", (run-1), "Change in deviance is", (deviance_new-deviance_old)/deviance_old, sep=" "))
         print((objective_new-objective_old)/objective_old)
         if (abs((objective_new-objective_old)/objective_old) < epsilon) break
       }
-    }
-    
-    if (!is.null(epsilon) & gradient) {
-      normParam <- normGrad(df, lambda, alpha, beta, C, D)
-      print(normParam)
-      if (normParam < epsilon) break
     }
     
     # Keeping track of the number of factors
@@ -292,7 +297,7 @@ parEst <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=NULL,
   
   output <- list("alpha" = alpha, "beta" = beta, "C" = C, "D" = D, "objective" = objective_all, 
                  "deviance" = deviance_all, "rmse" = rmse_it, "run" = run, "factors" = factors_all,
-                 "par_track" = par_track, "meanTime" = meanTime)
+                 "par_track" = par_track, "meanTime" = meanTime, "gradient" = gradient_all)
   return(output)
 }
 
@@ -520,7 +525,44 @@ parEstSlow <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=N
 
 normGrad <- function(df, lambda, alpha, beta, C, D, prop = 0.1) {
   # Take sample of the data
-  df_small <- data.frame(df[sample(nrow(df), floor(prop*nrow(df)), replace = FALSE), c("USERID_ind", "OFFERID_ind", "CLICK")])
+  # df_small <- data.frame(df[sample(nrow(df), floor(prop*nrow(df)), replace = FALSE), c("USERID_ind", "OFFERID_ind", "CLICK")])
+  df <- as.data.frame(df)
+  
+  # Take random sample of users
+  df_small <- data.frame(df[df$USERID_ind %in% sample(max(df$USERID_ind), floor(prop*max(df$USERID_ind)), replace = FALSE), c("USERID_ind", "OFFERID_ind", "CLICK")])
+  
+  gamma <- get_gamma0(df_small$USERID_ind, df_small$OFFERID_ind, alpha, beta, C, D)
+  df_small$difference <- df_small$CLICK - mu(gamma)
+  
+  # Get the gradients of alpha
+  deriv_alpha <- df_small %>% group_by(USERID_ind) %>% summarise(deriv_alpha = sum(difference)) %>% dplyr::select(deriv_alpha) %>% ungroup()
+  
+  # Get gradient of C (not vectorized, but that doesn't matter since we take the norm anyway)
+  mult_C <- tcrossprod(df_small$difference, rep(1, ncol(D))) * D[df_small$OFFERID_ind,]
+  mult_C <- data.frame(cbind("USERID_ind" = df_small$USERID_ind, mult_C))
+  deriv_C <- mult_C %>% group_by(USERID_ind) %>% summarise_all(sum) %>% ungroup()
+  deriv_C <- as.matrix(deriv_C[,-1] - lambda*C[deriv_C$USERID_ind, ])
+  
+  # Take random sample of offers
+  df_small2 <- data.frame(df[df$OFFERID_ind %in% sample(max(df$OFFERID_ind), floor(prop*max(df$OFFERID_ind)), replace = FALSE), c("USERID_ind", "OFFERID_ind", "CLICK")])
+  
+  gamma2 <- get_gamma0(df_small2$USERID_ind, df_small2$OFFERID_ind, alpha, beta, C, D)
+  df_small2$difference <- df_small2$CLICK - mu(gamma2)
+  
+  # Get the gradients of beta
+  deriv_beta <- df_small2 %>% group_by(OFFERID_ind) %>% summarise(deriv_beta = sum(difference)) %>% dplyr::select(deriv_beta) %>% ungroup()
+  
+  # Get gradient of D (not vectorized, but that doesn't matter since we take the norm anyway)
+  mult_D <- tcrossprod(df_small2$difference, rep(1, ncol(C))) * C[df_small2$USERID_ind,]
+  mult_D <- data.frame(cbind("OFFERID_ind" = df_small2$OFFERID_ind, mult_D))
+  deriv_D <- mult_D %>% group_by(OFFERID_ind) %>% summarise_all(sum) %>% ungroup()
+  deriv_D <- as.matrix(deriv_D[,-1] - lambda*D[deriv_D$OFFERID_ind, ])
+  
+  return(c("norm_alpha" = norm_vec(deriv_alpha), "norm_beta" = norm_vec(deriv_beta), "norm_C" = norm(deriv_C, type="F"), "norm_D" = norm(deriv_D, type="F")))
+}
+
+normFullGrad <- function(df, lambda, alpha, beta, C, D) {
+  df_small <- data.frame(df[, c("USERID_ind", "OFFERID_ind", "CLICK")])
   
   gamma <- get_gamma0(df_small$USERID_ind, df_small$OFFERID_ind, alpha, beta, C, D)
   df_small$difference <- df_small$CLICK - mu(gamma)
@@ -541,8 +583,9 @@ normGrad <- function(df, lambda, alpha, beta, C, D, prop = 0.1) {
   deriv_D <- mult_D %>% group_by(OFFERID_ind) %>% summarise_all(sum) %>% ungroup()
   deriv_D <- as.matrix(deriv_D[,-1] - lambda*D[deriv_D$OFFERID_ind, ])
   
-  return(norm_vec(deriv_alpha) + norm_vec(deriv_beta) + norm(deriv_C, type="F") + norm(deriv_D, type="F"))
+  return(c("norm_alpha" = norm_vec(deriv_alpha), "norm_beta" = norm_vec(deriv_beta), "norm_C" = norm(deriv_C, type="F"), "norm_D" = norm(deriv_D, type="F")))
 }
+
 
 speedSim <- function(NU, NI, SPARSITY, FACTORS, file="speedSim.xlsx"){
   # Initialize a multidimensional output array
@@ -783,8 +826,6 @@ f20_rel <- ggplot(dftemp_20_rel, aes(x=nu, y=diff, group=sparsity, linetype = fa
   theme(legend.position = "none")
 
 
-
-
 # Arranging in a grid
 grid.arrange(f5_abs1, f5_abs2, f5_rel, ncol = 3, nrow = 1)
 grid.arrange(f20_abs1, f20_abs2, f20_rel, ncol = 3, nrow = 1)
@@ -813,6 +854,7 @@ rmse <- FALSE
 # compareSpeed uses the parEst in this file!
 speedTest <- compareSpeed(df, subset, FACTORS, LAMBDA, iter, initType, llh, rmse)
 
+<<<<<<< HEAD
 # Algorithm using gradients --------------------------------------------------------------
 
 # Full grad vs MM ------------------------------------------------------------------------
@@ -833,3 +875,124 @@ epsilon <- 0.00001
 
 set.seed(123)
 fast <- parEst(df_obs, factors, lambda, iter, initType, llh, rmse, epsilon=epsilon)
+=======
+# Checking gradients for previous output ---------------------------------------------------
+
+# 1.
+df_train <- readRDS("Data/df_train")
+df_train <- df_train[, c("USERID", "MailOffer", "CLICK")]
+
+df_val <- readRDS("Data/df_val")
+df_val <- df_val[, c("USERID", "MailOffer", "CLICK")]
+
+prep <- prepData(df_train, df_val, onlyVar = TRUE)
+train <- prep$df_train
+
+parEst_f5_l5 <- readRDS("parEst/parEst_f5_l5.RDS")
+
+grad_f5_l5 <- matrix(nrow = 5, ncol = 4)
+for (i in 1:nrow(grad_f10_l10)) {
+  grad_f5_l5[i,] <- normGrad(train, parEst_f5_l5$lambda, parEst_f5_l5$parEst$alpha, parEst_f5_l5$parEst$beta, parEst_f5_l5$parEst$C, parEst_f5_l5$parEst$D)
+}
+
+# 2.
+df_obs <- readRDS("Data/df_obs.RDS")
+df_train <- df_obs[df_obs$res == 0, c("USERID", "MailOffer", "CLICK")]
+df_res <- df_obs[df_obs$res == 1, c("USERID", "MailOffer", "CLICK")]
+
+prep <- prepData(df_train, df_res, onlyVar = FALSE)
+train <- prep$df_train
+
+outputRes <- readRDS("outputRes.RDS")
+
+grad_f10_l10 <- matrix(nrow = 5, ncol = 4)
+for (i in 1:nrow(grad_f10_l10)) {
+  grad_f10_l10[i,] <- normGrad(train, lambda = 10, outputRes$parameters$alpha, outputRes$parameters$beta, outputRes$parameters$C, outputRes$parameters$D)
+}
+  
+
+# Algorithm using gradients ----------------------------------------------------------------
+
+factors <- 5
+lambda <- 5
+iter <- 250
+initType <- 2
+epsilon <- 1e-06
+
+df_train <- readRDS("Data/df_train")
+df_train <- df_train[, c("USERID", "MailOffer", "CLICK")]
+
+df_val <- readRDS("Data/df_val")
+df_val <- df_val[, c("USERID", "MailOffer", "CLICK")]
+
+prep <- prepData(df_train, df_val, onlyVar = TRUE)
+train <- prep$df_train[, c("USERID_ind", "OFFERID_ind", "CLICK")]
+
+# Estimate parameters
+set.seed(0)
+MM_grad <- parEst(train, factors, lambda, iter, initType, llh=TRUE, rmse=FALSE, epsilon=epsilon, gradient=TRUE, final.svd = TRUE)
+
+set.seed(0)
+MM_grad_highlambda <- parEst(train, factors, lambda = 50, iter = 100, initType, llh=TRUE, rmse=FALSE, epsilon=epsilon, gradient=TRUE, final.svd = TRUE)
+
+set.seed(0)
+MM_grad_nofinal <- parEst(train, factors, lambda, iter, initType, llh=TRUE, rmse=FALSE, epsilon=epsilon, gradient=TRUE, final.svd = FALSE)
+
+par(mfrow=c(2,2))
+plot(MM_grad$gradient[1,],
+     col="blue", type = "l", lwd=2, ylab="Gradient of alpha", xlab="Iteration")
+plot(MM_grad$gradient[2,],
+     col="green", type = "l", lwd=2, ylab="Gradient of beta", xlab="Iteration")
+plot(MM_grad$gradient[3,],
+     col="red", type = "l", lwd=2, ylab="Gradient of C", xlab="Iteration")
+plot(MM_grad$gradient[4,],
+     col="orange", type = "l", lwd=2, ylab="Gradient of D", xlab="Iteration")
+par(mfrow=c(1,1))
+
+# Finding norm for a small dataset -----------------------------------------------------
+
+df_train <- readRDS("Data/df_train")
+df_train <- df_train[order(df_train$USERID, df_train$MailOffer), c("USERID", "MailOffer", "CLICK")]
+df <- df_train[c(1:1000000),]
+
+df <- df %>% 
+  mutate(USERID_ind = group_indices(., factor(USERID, levels = unique(USERID))))
+df <- df %>% 
+  mutate(OFFERID_ind = group_indices(., factor(MailOffer, levels = unique(MailOffer))))
+
+factors <- 5
+lambda <- 5
+iter <- 1000
+initType <- 2
+epsilon <- 1e-06
+
+parEst_grad <- parEst(df[, c("USERID_ind", "OFFERID_ind", "CLICK")], factors, lambda, iter, initType, llh=TRUE, rmse=FALSE, epsilon=epsilon, gradient=TRUE)
+
+par(mfrow=c(2,2))
+plot(parEst_grad$gradient[1,c(1:parEst_grad$run-1)],
+     col="blue", type = "l", lwd=2, ylab="Gradient of alpha", xlab="Iteration")
+plot(parEst_grad$gradient[2,c(1:parEst_grad$run-1)],
+     col="green", type = "l", lwd=2, ylab="Gradient of beta", xlab="Iteration")
+plot(parEst_grad$gradient[3,c(1:parEst_grad$run-1)],
+     col="red", type = "l", lwd=2, ylab="Gradient of C", xlab="Iteration")
+plot(parEst_grad$gradient[4,c(1:parEst_grad$run-1)],
+     col="orange", type = "l", lwd=2, ylab="Gradient of D", xlab="Iteration")
+par(mfrow=c(1,1))
+
+alpha <- parEst_grad$alpha
+beta <- parEst_grad$beta
+C <- parEst_grad$C
+D <- parEst_grad$D
+
+gradients <- parEst_grad$gradient[,c(1:parEst_grad$run - 1)]
+
+write.csv(alpha, file = "alpha_small.csv")
+write.csv(beta, file = "beta_small.csv")
+write.csv(C, file = "C_small.csv")
+write.csv(D, file = "D_small.csv")
+write.csv(gradients, file = "gradient_small.csv")
+
+# calculate full gradient
+partialGrad <- normGrad(df, 5, alpha, beta, C, D)
+fullGrad <- normFullGrad(df, 5, alpha, beta, C, D)
+>>>>>>> 19297413ec1a68776b500b914fef8fa72713222f
