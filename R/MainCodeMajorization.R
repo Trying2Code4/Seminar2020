@@ -178,7 +178,7 @@ CVfast <- cvFast(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, iter, epsilon, warm)
 
 
 # Running algorithm using best parameters from CV ----------------------------------------
-df_train <- readRDS("df_train.RDS")
+df_train <- readRDS("df_train")
 df_train <- df_train[, c("USERID", "MailOffer", "CLICK")]
 
 df_val <- readRDS("df_val")
@@ -201,9 +201,9 @@ initType <- 2
 llh = F
 rmse = F
 epsilon <- 1e-06
-onlyVar = FALSE
+onlyVar = TRUE
 
-prep <- prepData(df_train, df_res, onlyVar)
+prep <- prepData(df_train, df_val, onlyVar)
 
 train <- prep$df_train
 test <- prep$df_test
@@ -360,5 +360,36 @@ saveRDS(df_val, "/Users/colinhuliselan/Documents/Master/Seminar/SharedData/df_va
 write.csv(df_val, file = "df_val.csv")
 saveRDS(df_train, "/Users/colinhuliselan/Documents/Master/Seminar/Shared_Data/df_train")
 write.csv(df_train, file = "df_train.csv")
+
+# Preparing data for comparing gradients ----------------------------------------------------------------
+df_obs <- readRDS("Data/df_obs.RDS")
+df_obs <- df_obs[, c("USERID", "MailOffer", "CLICK")]
+
+unique_ids <- unique(df$USERID)
+
+# Sample using original userid
+df_obs10k <- df[df$USERID %in% sample(unique_ids, 10000, replace = FALSE), ]
+df_obs50k <- df[df$USERID %in% sample(unique_ids, 50000, replace = FALSE), ]
+df_obs100k <- df[df$USERID %in% sample(unique_ids, 100000, replace = FALSE), ]
+
+addIndices <- function(df) {
+  df <- df %>% 
+    mutate(USERID_ind = group_indices(., factor(USERID, levels = unique(USERID))))
+  df <- df %>% 
+    mutate(OFFERID_ind = group_indices(., factor(MailOffer, levels = unique(MailOffer))))
+  
+  return(df)
+}
+
+dfList <- list(df_obs10k, df_obs50k, df_obs100k)
+dfList <- lapply(dfList, addIndices)
+
+write.csv(dfList[[1]], file = "df_obs10k.csv")
+write.csv(dfList[[2]], file = "df_obs50k.csv")
+write.csv(dfList[[3]], file = "df_obs100k.csv")
+
+# Add code for parEst here \\\\\\\\\
+
+
 
 
