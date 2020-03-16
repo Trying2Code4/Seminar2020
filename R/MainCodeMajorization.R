@@ -195,13 +195,13 @@ df_res <- df_obs[df_obs$res == 1, c("USERID", "MailOffer", "CLICK")]
 
 # Input whichever hyperparameters you want to test
 factors <- 10
-lambda <- 10
-iter <- 200000
-initType <- 2
-llh = F
+lambda <- 5
+iter <- 20000
+initType <- 1
+llh = T
 rmse = F
 epsilon <- 1e-06
-onlyVar = FALSE
+onlyVar = TRUE
 
 prep <- prepData(df_train, df_res, onlyVar)
 
@@ -209,11 +209,25 @@ train <- prep$df_train
 test <- prep$df_test
 globalMean <- prep$globalMean
 
+timeT <- system.time({
 set.seed(0)
-output <- fullAlg(train, test, factors, lambda, iter, initType, llh, 
+MMconvergenceT <- fullAlg(train, test, factors, lambda, iter, initType, llh, 
                   rmse, epsilon, globalMean = globalMean)
+})
 
-ungroup()
+onlyVar = FALSE
+prep <- prepData(df_train, df_res, onlyVar)
+train <- prep$df_train
+test <- prep$df_test
+globalMean <- prep$globalMean
+
+
+timeF <- system.time({
+  set.seed(0)
+  MMconvergenceF <- fullAlg(train, test, factors, lambda, iter, initType, llh, 
+                            rmse, epsilon, globalMean = globalMean)
+})
+
 
 baselineBest <- baselinePred(test, globalMean=globalMean)
 
@@ -259,6 +273,8 @@ df_game <- read_delim("/Users/colinhuliselan/Documents/Master/Seminar/SharedData
 
 df_obs <- df_obs[, c("USERID", "MailOffer", "CLICK")]
 df_game <- df_game[, c("USERID", "MailOffer", "CLICK")]
+
+saveRDS(df_game, "/Users/colinhuliselan/Documents/Master/Seminar/SharedData/df_game.RDS")
 
 prep <- prepData(df_obs, df_game, onlyVar = FALSE)
 df_obs <- prep$df_train
