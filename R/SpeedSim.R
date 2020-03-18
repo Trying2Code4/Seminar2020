@@ -444,7 +444,8 @@ parEstSlow <- function(df, factors, lambda, iter, initType, llh, rmse, df_test=N
     # H_slr_rowandcolmean <- splr(H_slr_rowandcolmean)
     
     # Retrieve C and D from the svd.als function
-    results <- svd.als(H_slr_rowandcolmean, rank.max = factors, lambda = lambda * 4)
+    results <- svd.als(H_slr_rowandcolmean, rank.max = factors, lambda = lambda * 4, 
+                       final.svd = FALSE)
     
     # Updates
     alpha <- newalpha
@@ -744,7 +745,7 @@ speedsim1 <- read.xlsx("speedsim1.xlsx")
 
 #### Create output -----------------------------------------------------------------------
 # Create a percentage difference
-speedsim1$diff <- (speedsim1$meanTimeSlow - speedsim1$meanTimeFast)/speedsim1$meanTimeFast * 100
+speedsim1$diff <- speedsim1$meanTimeSlow/speedsim1$meanTimeFast
 
 # Making a figures for runs with 5 factors
 dftemp_5 <- speedsim1[speedsim1$factors == 5, ]
@@ -761,13 +762,14 @@ f5_abs1 <- ggplot(dftemp_5_abs, aes(x=nu, y=value, group=interaction(variable, s
   scale_linetype_discrete(name="Sparsity level", labels=c("95%", "75%"))+
   scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x),
                 labels = trans_format("log10", math_format(10^.x))) +
-  labs(x ="Number of users", y = "Iteration time")+
+  labs(x ="Number of users", y = "Mean iteration time in sec.")+
   theme_bw()+
   theme(legend.position = c(0.3, 0.6))
 
 f5_abs2 <- f5_abs1 +
   scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
                 labels = trans_format("log10", math_format(10^.x)))+
+  labs(x ="Number of users", y = "Mean iteration time in sec. (log scale)")+
   theme(legend.position = "none")
 
 # Plot for the relative computation time
@@ -775,10 +777,11 @@ dftemp_5_rel <- speedsim1[speedsim1$factors == 5, ]
 f5_rel <- ggplot(dftemp_5_rel, aes(x=nu, y=diff, group=sparsity, linetype = factor(sparsity)))+
   geom_line()+
   geom_point()+
+  ylim(0.5, 5)+
   scale_linetype_discrete(name="Sparsity level", labels=c("95%", "75%"))+
   scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x),
                 labels = trans_format("log10", math_format(10^.x))) +
-  labs(x ="Number of users", y = "% Difference iteration time")+
+  labs(x ="Number of users", y = "Ratio of mean iteration times")+
   theme_bw()+
   theme(legend.position = "none")
 
@@ -798,13 +801,14 @@ f20_abs1 <- ggplot(dftemp_20_abs, aes(x=nu, y=value, group=interaction(variable,
   scale_linetype_discrete(name="Sparsity level", labels=c("95%", "75%"))+
   scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x),
                 labels = trans_format("log10", math_format(10^.x))) +
-  labs(x ="Number of users", y = "Iteration time")+
+  labs(x ="Number of users", y = "Mean iteration time in sec.")+
   theme_bw()+
   theme(legend.position = c(0.3, 0.6))
 
 f20_abs2 <- f20_abs1 +
   scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
                 labels = trans_format("log10", math_format(10^.x))) +
+  labs(x ="Number of users", y = "Mean iteration time in sec. (log scale)")+
   theme(legend.position = "none")
 
 # Plot for the relative computation time
@@ -812,10 +816,11 @@ dftemp_20_rel <- speedsim1[speedsim1$factors == 20, ]
 f20_rel <- ggplot(dftemp_20_rel, aes(x=nu, y=diff, group=sparsity, linetype = factor(sparsity)))+
   geom_line()+
   geom_point()+
+  ylim(0.5, 5)+
   scale_linetype_discrete(name="Sparsity level", labels=c("95%", "75%"))+
   scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x),
                 labels = trans_format("log10", math_format(10^.x))) +
-  labs(x ="Number of users", y = "% Difference iteration time")+
+  labs(x ="Number of users", y = "Ratio of mean iteration times")+
   theme_bw()+
   theme(legend.position = "none")
 
@@ -823,22 +828,6 @@ f20_rel <- ggplot(dftemp_20_rel, aes(x=nu, y=diff, group=sparsity, linetype = fa
 # Arranging in a grid
 grid.arrange(f5_abs1, f5_abs2, f5_rel, ncol = 3, nrow = 1)
 grid.arrange(f20_abs1, f20_abs2, f20_rel, ncol = 3, nrow = 1)
-
-
-#############
-df <- speedsim1
-dftemp05_5 <- df[(df$sparsity == 0.05 & df$factors == 5), c("nu", "meanTimeFast", "meanTimeSlow", "diff")]
-colnames(dftemp05_5) <- c("Number of users", "S+LR, 5% sparsity", "Full, 5% sparsity", "Difference, 5% sparsity")
-dftemp05_20 <- df[(df$sparsity == 0.05 & df$factors == 20), c("nu", "meanTimeFast", "meanTimeSlow", "diff")]
-colnames(dftemp05_20) <- c("Number of users", "S+LR, 5% sparsity", "Full, 5% sparsity", "Difference, 5% sparsity")
-dftemp25_5 <- df[(df$sparsity == 0.25 & df$factors == 5), c("meanTimeFast", "meanTimeSlow", "diff")]
-colnames(dftemp25_5) <- c("S+LR, 25% sparsity", "Full, 25% sparsity", "Difference, 25% sparsity")
-dftemp25_20 <- df[(df$sparsity == 0.25 & df$factors == 20), c("meanTimeFast", "meanTimeSlow", "diff")]
-colnames(dftemp25_20) <- c("S+LR, 25% sparsity", "Full, 25% sparsity", "Difference, 25% sparsity")
-
-
-dftemp_5 <- speedsim1[speedsim1$factors == 5, ]
-dftemp_5 <- melt(dftemp_5, id = c("nu", "sparsity") , measure = c("meanTimeFast", "meanTimeSlow"))
 
 
 #### Compare speeds ----------------------------------------------------------------------
@@ -856,13 +845,34 @@ subsets <- floor(proportions*nrow(df))
 subset <- subsets[1]
 FACTORS <- c(5, 10)
 LAMBDA <- c(5, 10)
-iter <- 6 # So we still have the average over 10 iterations after dropping the first one
+iter <- 6 # So we still have the average over 5 iterations after dropping the first one
 initType <- 2
 llh <- FALSE
 rmse <- FALSE
 
 # compareSpeed uses the parEst in this file!
 speedTest <- compareSpeed(df, subset, FACTORS, LAMBDA, iter, initType, llh, rmse)
+
+# Algorithm using gradients --------------------------------------------------------------
+
+# Full grad vs MM ------------------------------------------------------------------------
+# Import full observation set
+
+df_obs <- readRDS("df_obs.RDS")
+df_obs <- df_obs[ , c("USERID_ind", "OFFERID_ind", )]
+
+factors <- 10
+lambda <- 10
+iter <- 5
+initType <- 2
+onlyVar <- T
+llh <- FALSE
+rmse <- FALSE
+epsilon <- 0.00001
+
+
+set.seed(123)
+fast <- parEst(df_obs, factors, lambda, iter, initType, llh, rmse, epsilon=epsilon)
 
 # Checking gradients for previous output ---------------------------------------------------
 
@@ -1062,4 +1072,3 @@ ggsave(file="Figures/grad_beta.eps", plot = grad_beta)
 ggsave(file="Figures/grad_C.eps", plot = grad_C)
 ggsave(file="Figures/grad_D.eps", plot = grad_D)
 ggsave(file="Figures/llh.eps", plot = plot_llh)
-
