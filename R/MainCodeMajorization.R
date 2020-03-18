@@ -430,9 +430,9 @@ df_obs10k <- addIndices(df_obs10k)
 df_obs50k <- addIndices(df_obs50k)
 df_obs100k <- addIndices(df_obs100k)
 
-write.csv(dfList[[1]], file = "df_obs10k.csv")
-write.csv(dfList[[2]], file = "df_obs50k.csv")
-write.csv(dfList[[3]], file = "df_obs100k.csv")
+write.csv(df_obs10k, file = "df_obs10k.csv")
+write.csv(df_obs50k, file = "df_obs50k.csv")
+write.csv(df_obs100k, file = "df_obs100k.csv")
 
 factors <- 10
 lambda <- 5
@@ -458,4 +458,7 @@ time100k <- system.time({
   pars100k <- parEst(df_obs100k[ ,c("USERID_ind", "OFFERID_ind", "CLICK")], factors, lambda, iter, initType, llh=TRUE, rmse=FALSE, epsilon=epsilon)
 })
 save.RDS(pars100k, "pars100k.RDS")
+
+pars100k
+
 
