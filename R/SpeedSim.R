@@ -527,6 +527,7 @@ normGrad <- function(df, lambda, alpha, beta, C, D, prop = 0.1) {
   # Take sample of the data
   # df_small <- data.frame(df[sample(nrow(df), floor(prop*nrow(df)), replace = FALSE), c("USERID_ind", "OFFERID_ind", "CLICK")])
   df <- as.data.frame(df)
+  colnames(df) <- c("USERID_ind", "OFFERID_ind", "CLICK")
   
   # Take random sample of users
   df_small <- data.frame(df[df$USERID_ind %in% sample(max(df$USERID_ind), floor(prop*max(df$USERID_ind)), replace = FALSE), c("USERID_ind", "OFFERID_ind", "CLICK")])
@@ -731,8 +732,6 @@ fast$alpha - slow$alpha
 debug(parEstSlow)
 
 
-  
-
 
 #### Run the simulation ------------------------------------------------------------------
 NU <- round(c(10^2, 10^2.5, 10^3, 10^3.5, 10^4, 10^4.5, 10^5, 10^5.5, 10^6))
@@ -854,7 +853,6 @@ rmse <- FALSE
 # compareSpeed uses the parEst in this file!
 speedTest <- compareSpeed(df, subset, FACTORS, LAMBDA, iter, initType, llh, rmse)
 
-<<<<<<< HEAD
 # Algorithm using gradients --------------------------------------------------------------
 
 # Full grad vs MM ------------------------------------------------------------------------
@@ -875,7 +873,7 @@ epsilon <- 0.00001
 
 set.seed(123)
 fast <- parEst(df_obs, factors, lambda, iter, initType, llh, rmse, epsilon=epsilon)
-=======
+
 # Checking gradients for previous output ---------------------------------------------------
 
 # 1.
@@ -995,4 +993,82 @@ write.csv(gradients, file = "gradient_small.csv")
 # calculate full gradient
 partialGrad <- normGrad(df, 5, alpha, beta, C, D)
 fullGrad <- normFullGrad(df, 5, alpha, beta, C, D)
->>>>>>> 19297413ec1a68776b500b914fef8fa72713222f
+
+# Comparing gradients (10^4) -------------------------------------------------------------------
+df_obs10k <- read_delim("Data/DataGradient/df_obs10k.csv", ",", escape_double = FALSE, trim_ws = TRUE)
+df_obs10k <- df_obs10k[,c("USERID_ind", "OFFERID_ind", "CLICK")]
+pars10k <- readRDS("ParEst/pars10k.RDS")
+
+set.seed(0)
+normGrad10k <- normGrad(df_obs10k, lambda = 5, pars10k$alpha, pars10k$beta, pars10k$C, pars10k$D)
+normFullGrad10k <- normFullGrad(df_obs10k, lambda = 5, pars10k$alpha, pars10k$beta, pars10k$C, pars10k$D)
+
+# Comparing gradients (10^(4.5)) -------------------------------------------------------------------
+df_obs50k <- read_delim("Data/DataGradient/df_obs50k.csv", ",", escape_double = FALSE, trim_ws = TRUE)
+df_obs50k <- df_obs50k[,c("USERID_ind", "OFFERID_ind", "CLICK")]
+pars50k <- readRDS("ParEst/pars50k.RDS")
+
+set.seed(0)
+normGrad50k <- normGrad(df_obs50k, lambda = 5, pars50k$alpha, pars50k$beta, pars50k$C, pars50k$D)
+normFullGrad50k <- normFullGrad(df_obs50k, lambda = 5, pars50k$alpha, pars50k$beta, pars50k$C, pars50k$D)
+
+# Comparing gradients (10^5) -------------------------------------------------------------------
+df_obs100k <- read_delim("Data/DataGradient/df_obs100k.csv", ",", escape_double = FALSE, trim_ws = TRUE)
+df_obs100k <- df_obs100k[,c("USERID_ind", "OFFERID_ind", "CLICK")]
+pars100k <- readRDS("ParEst/pars100k.RDS")
+
+set.seed(0)
+normGrad100k <- normGrad(df_obs100k, lambda = 5, pars100k$alpha, pars100k$beta, pars100k$C, pars100k$D)
+normFullGrad100k <- normFullGrad(df_obs100k, lambda = 5, pars100k$alpha, pars100k$beta, pars100k$C, pars100k$D)
+
+# Output images gradients and llh -------------------------------------------------------------------
+
+# CAUTION: uses a different df_obs10k dataset than above
+set.seed(0)
+pars10k_grad <- parEst(df_obs10k, factors = 10, lambda = 5, iter = 1000, initType = 2, llh = TRUE, 
+                       rmse = FALSE, df_test=NULL, epsilon = 1e-06, gradient = TRUE)
+
+gradients <- data.frame(t(pars10k_grad$gradient[, c(1:pars10k_grad$run-1)]))
+colnames(gradients) <- c("norm_alpha", "norm_beta", "norm_C", "norm_D")
+gradients$iteration <- c(1:nrow(gradients))
+
+grad_alpha <- ggplot(gradients, aes(x=iteration, y=norm_alpha)) +
+  geom_line()+
+  # geom_point()+
+  labs(x ="Iteration", y = "Gradient norm of alpha")+
+  theme_bw()
+
+grad_beta <- ggplot(gradients, aes(x=iteration, y=norm_beta)) +
+  geom_line()+
+  # geom_point()+
+  labs(x ="Iteration", y = "Gradient norm of beta")+
+  theme_bw()
+
+grad_C <- ggplot(gradients, aes(x=iteration, y=norm_C)) +
+  geom_line()+
+  # geom_point()+
+  labs(x ="Iteration", y = "Gradient norm of C")+
+  theme_bw()
+
+grad_D <- ggplot(gradients, aes(x=iteration, y=norm_D)) +
+  geom_line()+
+  # geom_point()+
+  labs(x ="Iteration", y = "Gradient norm of D")+
+  theme_bw()
+
+grid.arrange(grad_alpha, grad_beta, grad_C, grad_D, ncol = 2, nrow = 2)
+
+df_llh <- pars10k_grad$objective[c(2:pars10k_grad$run)]
+df_llh <- data.frame(cbind(llh = df_llh, iteration = c(1:length(df_llh))))
+
+plot_llh <- ggplot(df_llh, aes(x=iteration, y=llh)) +
+  geom_line()+
+  # geom_point()+
+  labs(x ="Iteration", y = "Penalized negative log likelihood")+
+  theme_bw(base_size = 13)
+
+ggsave(file="Figures/grad_alpha.eps", plot = grad_alpha)
+ggsave(file="Figures/grad_beta.eps", plot = grad_beta)
+ggsave(file="Figures/grad_C.eps", plot = grad_C)
+ggsave(file="Figures/grad_D.eps", plot = grad_D)
+ggsave(file="Figures/llh.eps", plot = plot_llh)

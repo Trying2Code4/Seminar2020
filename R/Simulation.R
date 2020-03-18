@@ -263,11 +263,13 @@ df$CLICK <- as.numeric(df$CLICK > 0.5)
 factors <- 3
 lambda <- 20
 iter <- 50
+iter <- 100
 initType <- 2
 onlyVar <- TRUE
 llh <- TRUE
 rmse <- TRUE
 epsilon <- 0.0000001
+epsilon <- NULL
 
 # Train test sploit
 set.seed(50)
@@ -372,6 +374,7 @@ output <- fullAlg(df_train, df_test, factors, lambda, iter, initType, llh,
 
 ### Overwrite simulation ----
 # We can also simply overwrite the test clicks
+set.seed(0)
 df_test$CLICK <- sample(c(0,1), nrow(df_test), replace = TRUE)
 
 # Getting predictions
@@ -379,10 +382,5 @@ set.seed(0)
 output <- fullAlg(df_train, df_test, factors, lambda, iter, initType, llh, 
                   rmse, epsilon)
 
-debug(fullAlg)
 
-mean(output$prediction$CLICK)
-mean(output$prediction$prediction)
-output$parameters$rmse
 
-View(output$parameters$par_track$C_track)
