@@ -44,12 +44,12 @@ df$CLICK <- as.numeric(df$CLICK > 0.5)
 # Setting parameters
 factors <- 3
 lambda <- 20
-iter <- 10
+iter <- 100
 initType <- 2
 onlyVar <- TRUE
 llh <- TRUE
 rmse <- TRUE
-epsilon <- 0.0001
+epsilon <- NULL
 
 # Train test sploit
 set.seed(50)
@@ -140,7 +140,8 @@ df <- df %>%
   mutate(OFFERID_ind_new = group_indices(., factor(OFFERID, levels = unique(OFFERID))))
 
 # Split sets
-df_test <- df[as.logical(df$train_test), ]
+df_test <- df[as.logical(df$train_test), c("USERID_ind_new", "OFFERID_ind_new", "CLICK", "ratioU", 
+                                           "ratioO", "prediction")]
 df_train <- df[!(as.logical(df$train_test)), c("USERID_ind_new", "OFFERID_ind_new", "CLICK", 
                                                "ratioU", "ratioO")]
 
@@ -151,6 +152,7 @@ output <- fullAlg(df_train, df_test, factors, lambda, iter, initType, llh,
 
 ### Overwrite simulation ----
 # We can also simply overwrite the test clicks
+set.seed(0)
 df_test$CLICK <- sample(c(0,1), nrow(df_test), replace = TRUE)
 
 # Getting predictions
@@ -159,3 +161,4 @@ output <- fullAlg(df_train, df_test, factors, lambda, iter, initType, llh,
                   rmse, epsilon)
 
 mean(output$prediction$CLICK)
+

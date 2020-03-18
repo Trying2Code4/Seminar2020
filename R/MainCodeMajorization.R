@@ -362,15 +362,15 @@ saveRDS(df_train, "/Users/colinhuliselan/Documents/Master/Seminar/Shared_Data/df
 write.csv(df_train, file = "df_train.csv")
 
 # Preparing data for comparing gradients ----------------------------------------------------------------
-df_obs <- readRDS("Data/df_obs.RDS")
-df_obs <- df_obs[, c("USERID", "MailOffer", "CLICK")]
+df <- readRDS("Data/df_obs.RDS")
+df <- df[, c("USERID", "MailOffer", "CLICK")]
 
 unique_ids <- unique(df$USERID)
 
 # Sample using original userid
 df_obs10k <- df[df$USERID %in% sample(unique_ids, 10000, replace = FALSE), ]
 df_obs50k <- df[df$USERID %in% sample(unique_ids, 50000, replace = FALSE), ]
-df_obs100k <- df[df$USERID %in% sample(unique_ids, 100000, replace = FALSE), ]
+df_obs100k <- df[df$USERID %in% sample(unique_ids, 1000, replace = FALSE), ]
 
 addIndices <- function(df) {
   df <- df %>% 
@@ -388,8 +388,37 @@ write.csv(dfList[[1]], file = "df_obs10k.csv")
 write.csv(dfList[[2]], file = "df_obs50k.csv")
 write.csv(dfList[[3]], file = "df_obs100k.csv")
 
+# df_obs10k <- addIndices(df_obs10k)
+# df_obs50k <- addIndices(df_obs50k)
+# df_obs100k <- addIndices(df_obs100k)
+
+# write.csv(df_obs10k, file = "df_obs10k.csv")
+# write.csv(df_obs50k, file = "df_obs50k.csv")
+# write.csv(df_obs100k, file = "df_obs100k.csv")
+
 # Add code for parEst here \\\\\\\\\
+df_obs10k <- dfList[[1]][,c("USERID_ind", "OFFERID_ind", "CLICK")]
+df_obs50k <- dfList[[2]][,c("USERID_ind", "OFFERID_ind", "CLICK")]
+df_obs100k <- dfList[[3]][,c("USERID_ind", "OFFERID_ind", "CLICK")]
 
+# Save initialization
+df_obs10k <- read_delim("Data/DataGradient/df_obs10k.csv", ",", escape_double = FALSE, trim_ws = TRUE)
+df_obs10k <- df_obs10k[,c("USERID_ind", "OFFERID_ind", "CLICK")]
 
+init10k <- initChoose(df_obs10k, factors = 10, lambda = 5, initType = 2)
+write.csv(init10k$alpha, "alpha10k.csv")
+write.csv(init10k$beta, "beta10k.csv")
 
+df_obs50k <- read_delim("Data/DataGradient/df_obs50k.csv", ",", escape_double = FALSE, trim_ws = TRUE)
+df_obs50k <- df_obs50k[,c("USERID_ind", "OFFERID_ind", "CLICK")]
 
+init50k <- initChoose(df_obs50k, factors = 10, lambda = 5, initType = 2)
+write.csv(init50k$alpha, "alpha50k.csv")
+write.csv(init50k$beta, "beta50k.csv")
+
+df_obs100k <- read_delim("Data/DataGradient/df_obs100k.csv", ",", escape_double = FALSE, trim_ws = TRUE)
+df_obs100k <- df_obs100k[,c("USERID_ind", "OFFERID_ind", "CLICK")]
+
+init100k <- initChoose(df_obs100k, factors = 10, lambda = 5, initType = 2)
+write.csv(init100k$alpha, "alpha100k.csv")
+write.csv(init100k$beta, "beta100k.csv")
