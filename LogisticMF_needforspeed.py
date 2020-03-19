@@ -6,6 +6,12 @@ Created on Sat Feb  1 10:07:31 2020
 @author: matevaradi
 """
 
+##NOTES:
+# - Make sure numba is imported ($ conda install numba )
+# - Enter your path at line 23
+# - you can set different proportions to the data splitting in line 242
+# - the equivalent of onlyVars is excludeNonclickers in line 258
+# - you can adjust the hyperparameters at lines 267-268
 
 ## PLELIMINARIES
 import time
@@ -13,33 +19,13 @@ import numpy as np
 import pandas as pd
 import random
 import scipy.sparse as sp
-import os
-#os.chdir("\\\\campus.eur.nl\\users\\students\\495556mv\\Documents\\Seminar2020")
-os.chdir("/Users/matevaradi/Documents/ESE/Seminar/Seminar2020")
 from numba import jit
+import os
+### ENTER YOUR PATH HERE:  ###
+os.chdir("____________________________________")
+from sklearn.model_selection import train_test_split
 from Tools import encoder, test_predictions, train_test, get_test_pred
 
-
-# Get Train RMSE
-def trainRMSE(P,clicks,received):
-    #Takes P matrix, clicks matrix and received matrix and outputs train RMSE
-    e=clicks-P
-    e=np.square(e)
-    e=received.multiply(e)
-    RMSE=np.mean(e)
-    RMSE=np.power(RMSE,0.5)
-    return RMSE
-
-# Get Test Predictions and Test RMSE
-def testRMSE(results):
-    #Takes results dataframe and outputs RMSE
-    p=results["PROBABILITY"]
-    click=results["CLICK"]
-    e=click-p
-    e=np.square(e)
-    RMSE=np.mean(e)
-    RMSE=np.power(RMSE,0.5)
-    return RMSE
 
 
 #%% LOGISTIC MATRIX FACTORIZATION
@@ -47,7 +33,7 @@ def testRMSE(results):
 class LogisticMF():
 
     def __init__(self, clicks, received,num_factors, reg_param=0.6, lrate=1.0,
-                 maxiter=100,stochastic=False,epsilon=1e-5):
+                 maxiter=100,stochastic=False,epsilon=0.00001):
         self.clicks = clicks            #click data in sparse format
         self.received = received
         self.num_users = clicks.shape[0]
@@ -61,12 +47,14 @@ class LogisticMF():
     
     @jit
     def train_model(self):
-        
+
         self.ones = np.ones((self.num_users, self.num_items))
         self.user_vectors = np.random.normal(scale=1/self.reg_param,
                                              size=(self.num_users,self.num_factors))
         self.item_vectors = np.random.normal(scale=1/self.reg_param,
                                              size=(self.num_items,self.num_factors))
+        #self.user_biases = np.random.normal(size=(self.num_users, 1))
+        #self.item_biases = np.random.normal(size=(self.num_items, 1))
         self.user_biases = np.zeros((self.num_users, 1))
         self.item_biases = np.zeros((self.num_items, 1))
 
@@ -81,7 +69,7 @@ class LogisticMF():
             user_bias_deriv_sum = np.zeros((self.num_users, 1)) 
             item_bias_deriv_sum = np.zeros((self.num_items, 1)) 
         
-        self.convergence = np.zeros((self.iterations,4)) 
+        self.time = np.zeros(self.iterations) 
         
         
         for i in range(self.iterations):
@@ -100,6 +88,8 @@ class LogisticMF():
             self.user_vectors += vec_step_size * user_vec_deriv
             self.user_biases += np.multiply(bias_step_size, user_bias_deriv)
 
+            #t1 = time.time()
+            #print('iteration %i solved for users %f seconds' % (i + 1, t1 - t0))
 
             # Fix users and solve for items
             # take step towards gradient of deriv of log likelihood
@@ -115,20 +105,28 @@ class LogisticMF():
             self.item_vectors += vec_step_size * item_vec_deriv
             self.item_biases += np.multiply(bias_step_size, item_bias_deriv)
             
-            self.convergence[i,0]=np.linalg.norm(user_vec_deriv)
-            self.convergence[i,1]=np.linalg.norm(item_vec_deriv)
-            self.convergence[i,2]=np.linalg.norm(user_bias_deriv)
-            self.convergence[i,3]=np.linalg.norm(item_bias_deriv)
-            t1 = time.time()
-            print('iteration %i finished in %f seconds' % (i + 1, t1 - t0))
-
+            #self.convergence[i,0]=self.log_likelihood()
+            #self.convergence[i,1]=np.linalg.norm(user_vec_deriv)
+            #self.convergence[i,2]=np.linalg.norm(item_vec_deriv)
+            t2 = time.time()
+            self.time[i]=(t2-t0)
+            print('iteration %i finished in %f seconds' % (i + 1, t2 - t0))
+            #print('Log-likelihood: ',self.convergence[i,0])
+            #print("User gradient norm: ",self.convergence[i,1])
+            #print("Item gradient norm: ",self.convergence[i,2])
+            #P = self.predict()
+            #results=test_predictions2(P,key,trainset,testset,replacement=rep)
+            #RMSE=testRMSE(results)
+            #self.convergence[i,3]=RMSE 
+            #print('RMSE: ',RMSE)
             
-            #Stop if the gradient norms are smaller than epsilon:
-            if self.convergence[i,0]<self.epsilon and self.convergence[i,1]<self.epsilon:
-                self.iterations=i
-                self.convergence=self.convergence[0:(i+1),:]
-                break
-                            
+            #Stop if relative change to log likelihood is smaller than epsilon
+            #if abs((self.convergence[(i-1),0]-self.convergence[i,0])/self.convergence[(i-1),0])<self.epsilon:
+            #    self.iterations=i
+            #    self.convergence=self.convergence[0:(i+1),:]
+            #    break
+                
+            
 
     @jit
     def deriv(self, user):
@@ -231,33 +229,44 @@ class LogisticMF():
         P = np.exp(P)
         P = P/(self.ones+P)
         return P
+    
+    
 
-
-#%% RUNNING THE METHOD
+   
+#%% RUN
 
 # Loading datasets
-game=pd.read_csv('df_game.csv')
 obs=pd.read_csv('df_obs.csv')
-train=pd.read_csv('df_train.csv')
-res=pd.read_csv('df_res.csv')
-val=pd.read_csv('df_val.csv')
+
+# Splitting to five different sizes:
+proportions=np.array([0.2,0.4,0.6,0.8,1]) 
+sizes=np.floor(proportions*obs.shape[0]) # The five different subset sizes
+obsSorted=obs.sort_values(by=['USERID',"MailOffer"], axis = 0, ascending = True) # sorting the data
+df0=obsSorted[0:int(sizes[0])]
+df1=obsSorted[0:int(sizes[1])]
+df2=obsSorted[0:int(sizes[2])]
+df3=obsSorted[0:int(sizes[3])]
+df4=obsSorted[0:int(sizes[4])]
 
 
-# Get data into correct format and save keys for linking back later
-formatted,key=encoder(train,excludeNonclickers=True) 
-# Get data in sparse format and keys for mapping
-clicks=sp.csr_matrix((formatted["click"], (formatted["user"], formatted["item"])))
-# Load ones where there was an observation
-received=sp.csr_matrix((np.ones(len(formatted["user"])),(formatted["user"],formatted["item"])))
+# Array to save results:
+iterTime=np.zeros(5)
 
+i=0
+for df in [df0,df1,df2,df3,df4]: 
+    # Get data in correct format
+    formatted,key=encoder(df,excludeNonclickers=True) 
+    #Get data in sparse format and keys for mapping
+    clicks=sp.csr_matrix((formatted["click"], (formatted["user"], formatted["item"])))
+    #Load ones where there was an observation
+    received=sp.csr_matrix((np.ones(len(formatted["user"])),(formatted["user"],formatted["item"])))
 
-#  Train model
-logMF=LogisticMF(clicks,received,num_factors=5,maxiter=1000,stochastic=True,reg_param=10) 
-logMF.train_model()
-# Get predictions
-P=logMF.predict()
-rep=np.mean(train["CLICK"])
-results=test_predictions(P,key,train,val,replacement=rep)
-# Evaluate
-trainRMSE(P,clicks,received)
-testRMSE(results)
+    # Train the model
+    # Adjust hyperparameters
+    iteration_num=11 # Number of iterations
+    lambda_val=5     # Lambda
+    factors=10       # Number of factors
+    logMF=LogisticMF(clicks,received,num_factors=factors,maxiter=iteration_num,stochastic=True,reg_param=lambda_val) 
+    logMF.train_model()
+    iterTime[i]=np.mean(logMF.time[1:])
+    i+1
