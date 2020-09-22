@@ -178,7 +178,7 @@ CVfast <- cvFast(df, FACTORS, LAMBDA, INITTYPE, ONLYVAR, iter, epsilon, warm)
 
 
 # Running algorithm using best parameters from CV ----------------------------------------
-df_train <- readRDS("df_train.RDS")
+df_train <- readRDS("df_train")
 df_train <- df_train[, c("USERID", "MailOffer", "CLICK")]
 
 df_val <- readRDS("df_val")
@@ -195,25 +195,39 @@ df_res <- df_obs[df_obs$res == 1, c("USERID", "MailOffer", "CLICK")]
 
 # Input whichever hyperparameters you want to test
 factors <- 10
-lambda <- 10
-iter <- 200000
-initType <- 2
-llh = F
+lambda <- 5
+iter <- 20000
+initType <- 1
+llh = T
 rmse = F
 epsilon <- 1e-06
-onlyVar = FALSE
+onlyVar = TRUE
 
-prep <- prepData(df_train, df_res, onlyVar)
+prep <- prepData(df_train, df_val, onlyVar)
 
 train <- prep$df_train
 test <- prep$df_test
 globalMean <- prep$globalMean
 
+timeT <- system.time({
 set.seed(0)
-output <- fullAlg(train, test, factors, lambda, iter, initType, llh, 
+MMconvergenceT <- fullAlg(train, test, factors, lambda, iter, initType, llh, 
                   rmse, epsilon, globalMean = globalMean)
+})
 
-ungroup()
+onlyVar = FALSE
+prep <- prepData(df_train, df_res, onlyVar)
+train <- prep$df_train
+test <- prep$df_test
+globalMean <- prep$globalMean
+
+
+timeF <- system.time({
+  set.seed(0)
+  MMconvergenceF <- fullAlg(train, test, factors, lambda, iter, initType, llh, 
+                            rmse, epsilon, globalMean = globalMean)
+})
+
 
 baselineBest <- baselinePred(test, globalMean=globalMean)
 
@@ -259,6 +273,8 @@ df_game <- read_delim("/Users/colinhuliselan/Documents/Master/Seminar/SharedData
 
 df_obs <- df_obs[, c("USERID", "MailOffer", "CLICK")]
 df_game <- df_game[, c("USERID", "MailOffer", "CLICK")]
+
+saveRDS(df_game, "/Users/colinhuliselan/Documents/Master/Seminar/SharedData/df_game.RDS")
 
 prep <- prepData(df_obs, df_game, onlyVar = FALSE)
 df_obs <- prep$df_train
@@ -361,4 +377,124 @@ write.csv(df_val, file = "df_val.csv")
 saveRDS(df_train, "/Users/colinhuliselan/Documents/Master/Seminar/Shared_Data/df_train")
 write.csv(df_train, file = "df_train.csv")
 
+# Preparing data for comparing gradients ----------------------------------------------------------------
+df <- readRDS("Data/df_obs.RDS")
+df <- df[, c("USERID", "MailOffer", "CLICK")]
+
+unique_ids <- unique(df$USERID)
+
+# Sample using original userid
+df_obs10k <- df[df$USERID %in% sample(unique_ids, 10000, replace = FALSE), ]
+df_obs50k <- df[df$USERID %in% sample(unique_ids, 50000, replace = FALSE), ]
+df_obs100k <- df[df$USERID %in% sample(unique_ids, 1000, replace = FALSE), ]
+
+addIndices <- function(df) {
+  df <- df %>% 
+    mutate(USERID_ind = group_indices(., factor(USERID, levels = unique(USERID))))
+  df <- df %>% 
+    mutate(OFFERID_ind = group_indices(., factor(MailOffer, levels = unique(MailOffer))))
+  
+  return(df)
+}
+
+dfList <- list(df_obs10k, df_obs50k, df_obs100k)
+dfList <- lapply(dfList, addIndices)
+
+write.csv(dfList[[1]], file = "df_obs10k.csv")
+write.csv(dfList[[2]], file = "df_obs50k.csv")
+write.csv(dfList[[3]], file = "df_obs100k.csv")
+
+# df_obs10k <- addIndices(df_obs10k)
+# df_obs50k <- addIndices(df_obs50k)
+# df_obs100k <- addIndices(df_obs100k)
+
+# write.csv(df_obs10k, file = "df_obs10k.csv")
+# write.csv(df_obs50k, file = "df_obs50k.csv")
+# write.csv(df_obs100k, file = "df_obs100k.csv")
+
+# Add code for parEst here \\\\\\\\\
+df_obs10k <- dfList[[1]][,c("USERID_ind", "OFFERID_ind", "CLICK")]
+df_obs50k <- dfList[[2]][,c("USERID_ind", "OFFERID_ind", "CLICK")]
+df_obs100k <- dfList[[3]][,c("USERID_ind", "OFFERID_ind", "CLICK")]
+
+# Save initialization
+df_obs10k <- read_delim("Data/DataGradient/df_obs10k.csv", ",", escape_double = FALSE, trim_ws = TRUE)
+df_obs10k <- df_obs10k[,c("USERID_ind", "OFFERID_ind", "CLICK")]
+
+init10k <- initChoose(df_obs10k, factors = 10, lambda = 5, initType = 2)
+write.csv(init10k$alpha, "alpha10k.csv")
+write.csv(init10k$beta, "beta10k.csv")
+
+df_obs50k <- read_delim("Data/DataGradient/df_obs50k.csv", ",", escape_double = FALSE, trim_ws = TRUE)
+df_obs50k <- df_obs50k[,c("USERID_ind", "OFFERID_ind", "CLICK")]
+
+init50k <- initChoose(df_obs50k, factors = 10, lambda = 5, initType = 2)
+write.csv(init50k$alpha, "alpha50k.csv")
+write.csv(init50k$beta, "beta50k.csv")
+
+df_obs100k <- read_delim("Data/DataGradient/df_obs100k.csv", ",", escape_double = FALSE, trim_ws = TRUE)
+df_obs100k <- df_obs100k[,c("USERID_ind", "OFFERID_ind", "CLICK")]
+
+# Convergence ----------------------------------------------------------------------------
+df <- readRDS("df_obs.RDS")
+df <- df[, c("USERID", "MailOffer", "CLICK")]
+
+unique_ids <- unique(df$USERID)
+
+# Sample using original userid
+set.seed(123)
+df_obs10k <- df[df$USERID %in% sample(unique_ids, 10000, replace = FALSE), ]
+df_obs50k <- df[df$USERID %in% sample(unique_ids, round(10^4.5), replace = FALSE), ]
+df_obs100k <- df[df$USERID %in% sample(unique_ids, 100000, replace = FALSE), ]
+
+addIndices <- function(df) {
+  df <- df %>% 
+    mutate(USERID_ind = group_indices(., factor(USERID, levels = unique(USERID))))
+  df <- df %>% 
+    mutate(OFFERID_ind = group_indices(., factor(MailOffer, levels = unique(MailOffer))))
+  return(df)
+}
+
+df_obs10k <- addIndices(df_obs10k)
+df_obs50k <- addIndices(df_obs50k)
+df_obs100k <- addIndices(df_obs100k)
+
+write.csv(df_obs10k, file = "df_obs10k.csv")
+write.csv(df_obs50k, file = "df_obs50k.csv")
+write.csv(df_obs100k, file = "df_obs100k.csv")
+
+factors <- 10
+lambda <- 5
+iter <- 20000
+initType <- 2
+epsilon <- 1e-06
+onlyVar = FALSE
+
+time10k <- system.time({
+  set.seed(123)
+  pars10k <- parEst(df_obs10k[ ,c("USERID_ind", "OFFERID_ind", "CLICK")], factors, lambda, iter, initType, llh=TRUE, rmse=FALSE, epsilon=epsilon)
+})
+saveRDS(pars10k, "pars10k.RDS")
+
+time50k <- system.time({
+  set.seed(123)
+  pars50k <- parEst(df_obs50k[ ,c("USERID_ind", "OFFERID_ind", "CLICK")], factors, lambda, iter, initType, llh=TRUE, rmse=FALSE, epsilon=epsilon)
+})
+saveRDS(pars50k, "pars50k.RDS")
+
+time100k <- system.time({
+  set.seed(123)
+  pars100k <- parEst(df_obs100k[ ,c("USERID_ind", "OFFERID_ind", "CLICK")], factors, lambda, iter, initType, llh=TRUE, rmse=FALSE, epsilon=epsilon)
+})
+save.RDS(pars100k, "pars100k.RDS")
+
+
+
+pars100k
+
+
+
+init100k <- initChoose(df_obs100k, factors = 10, lambda = 5, initType = 2)
+write.csv(init100k$alpha, "alpha100k.csv")
+write.csv(init100k$beta, "beta100k.csv")
 
